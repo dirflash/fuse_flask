@@ -1,0 +1,8 @@
+__pycache__
+.mypy_cache
+.venv
+.vscode
+*.ipynb
+/logs/*
+.mypy_cache/*
+modules/preferences/preferences.py
