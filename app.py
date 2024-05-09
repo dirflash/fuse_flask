@@ -1,37 +1,56 @@
 import logging
 import os
 import time
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 import certifi
 import pandas as pd
-from flask import Flask, render_template, request, send_from_directory
+from flask import (
+    Flask,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 from werkzeug.utils import secure_filename
 
 import modules.preferences.preferences as pref
+from modules.fuse_date import FuseDate
 
 # pylint: disable=logging-fstring-interpolation
 
 app = Flask(__name__)
 
-# Configure logging
-file_handler = RotatingFileHandler("logging/flask_app.log", maxBytes=10000, backupCount=5)
-file_handler.setLevel(logging.INFO)
+# Set up logging
+log_file = os.path.join(app.root_path, "logs", "flask_app.log")
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+# Set up console logging
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+console_handler.setFormatter(console_formatter)
+
+# Set up file logging
+file_handler = RotatingFileHandler(log_file, maxBytes=10000, backupCount=5)
+file_handler.setLevel(logging.DEBUG)
 file_formatter = logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 file_handler.setFormatter(file_formatter)
 
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(console_formatter)
+# Configure the root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+root_logger.addHandler(console_handler)
+root_logger.addHandler(file_handler)
 
-app.logger.addHandler(file_handler)
-app.logger.addHandler(console_handler)
-app.logger.setLevel(logging.DEBUG)
 app.logger.info("Application started")
 
 app.config["UPLOAD_FOLDER"] = "uploads/"
@@ -50,12 +69,9 @@ def check_mongo_connection():
     try:
         Mongo_Connection_URI.server_info()
         app.logger.info("Test connection to MongoDB successful.")
-        # Close connection to Mongo
-        # Mongo_Connection_URI.close()
-        # app.logger.info("Closed connection to MongoDB.")
-    except ConnectionFailure:
+    except ConnectionFailure as mongo_connection_failure:
         app.logger.error("Failed to connect to MongoDB")
-        # app.logger.error(mongo_connection_failure)
+        app.logger.error(mongo_connection_failure)
         return render_template(
             "notification.html"
         ), 503  # Return notification page with 503 Service Unavailable status
@@ -68,6 +84,10 @@ def check_mongo_connection():
         return render_template(
             "notification.html"
         ), 500  # Return notification page with 500 Internal Server Error
+    """else:
+        # Close connection to Mongo
+        Mongo_Connection_URI.close()
+        app.logger.info("Closed connection to MongoDB.")"""
 
 
 def allowed_file(filename):
@@ -162,7 +182,21 @@ def upload_file():
 # Define a route for the home page
 @app.route('/')
 def home():
-    return render_template('index.html')
+    """Get the Fuse date"""
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+    if fuse_date is None:
+        fuse_date = "Not set"
+    else:
+        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d")
+        current_time = datetime.now()
+        if fuse_date_obj < current_time:
+            fuse_date = "Expired"
+            return redirect(url_for("set_fuse_date"))
+        else:
+            app.logger.info(f"Fuse date: {fuse_date_obj}")
+            app.logger.info(f"Current time: {current_time}")
+    return render_template("index.html", fuse_date=fuse_date)
+
 
 # Define a route for the about page
 @app.route('/about')
@@ -176,6 +210,30 @@ def favicon():
         "favicon.ico",
         mimetype="image/vnd.microsoft.icon",
     )
+
+@app.route("/set_fuse_date", methods=["GET", "POST"])
+def set_fuse_date():
+    if request.method == "POST":
+        # Get the new fuse date from the form
+        new_fuse_date = request.form["new_fuse_date"]
+        app.logger.info(f"New fuse date: {new_fuse_date}")
+
+        try:
+            # Convert the new fuse date to a datetime object
+            new_fuse_date_obj = datetime.strptime(new_fuse_date, "%Y-%m-%d")
+
+            # Update the MongoDB document with the new fuse date
+
+            # Redirect to the home page after updating
+            return redirect(url_for("home"))
+        except ValueError:
+            # Handle invalid date format
+            error_message = (
+                "Invalid date format. Please enter the date in YYYY-MM-DD format."
+            )
+            return render_template("set_fuse_date.html", error=error_message)
+
+    return render_template("set_fuse_date.html")
 
 
 if __name__ == '__main__':
