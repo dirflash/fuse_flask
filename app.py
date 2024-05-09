@@ -15,7 +15,6 @@ from flask import (
     url_for,
 )
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure, OperationFailure
 from werkzeug.utils import secure_filename
 
 import modules.preferences.preferences as pref
@@ -24,10 +23,6 @@ from modules.fuse_date import FuseDate
 # pylint: disable=logging-fstring-interpolation
 
 app = Flask(__name__)
-
-# Set up logging
-log_file = os.path.join(app.root_path, "logs", "flask_app.log")
-os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
 # Set up console logging
 console_handler = logging.StreamHandler()
@@ -38,6 +33,7 @@ console_formatter = logging.Formatter(
 console_handler.setFormatter(console_formatter)
 
 # Set up file logging
+log_file = os.path.join(app.root_path, "logs", "flask_app.log")
 file_handler = RotatingFileHandler(log_file, maxBytes=10000, backupCount=5)
 file_handler.setLevel(logging.DEBUG)
 file_formatter = logging.Formatter(
@@ -64,8 +60,8 @@ Mongo_Connection_URI: MongoClient = MongoClient(
     tlsCAFile=certifi.where(),serverSelectionTimeoutMS=500
 )
 
-def check_mongo_connection():
-    ''' Test the MongoDB connection '''
+"""def check_mongo_connection():
+    # Test the MongoDB connection
     try:
         Mongo_Connection_URI.server_info()
         app.logger.info("Test connection to MongoDB successful.")
@@ -84,10 +80,20 @@ def check_mongo_connection():
         return render_template(
             "notification.html"
         ), 500  # Return notification page with 500 Internal Server Error
-    """else:
+    else:
         # Close connection to Mongo
         Mongo_Connection_URI.close()
         app.logger.info("Closed connection to MongoDB.")"""
+
+
+"""scheduler = BackgroundScheduler()
+scheduler.add_job(
+    func=lambda: print("Scheduler task running."), trigger="interval", seconds=60
+)
+scheduler.start()
+
+# Ensure that the scheduler is shut down properly on application exit
+atexit.register(lambda: scheduler.shutdown(wait=False))"""
 
 
 def allowed_file(filename):
@@ -100,26 +106,6 @@ def allowed_file(filename):
         str: file extension if in ALLOWED_EXTENSIONS
     """
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-@app.before_request
-def before_request():
-    response = check_mongo_connection()
-    if response:
-        return response
-
-@app.before_request
-def log_request_info():
-    """Log the requestor information for each request"""
-    remote_addr = request.remote_addr
-    user_agent = request.headers.get("User-Agent")
-    request_path = request.path
-    request_method = request.method
-
-    log_message = (
-        f"Request from {remote_addr} - {user_agent} - {request_method} {request_path}"
-    )
-    app.logger.info(log_message)
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -236,7 +222,15 @@ def set_fuse_date():
     return render_template("set_fuse_date.html")
 
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    try:
+        app.run(
+            debug=True, use_reloader=False
+        )  # Disable reloader if you handle the shutdown manually
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        # scheduler.shutdown(wait=False)
+        print("Scheduler has been shut down.")
 
 # app.py
