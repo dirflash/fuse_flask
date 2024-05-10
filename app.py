@@ -97,6 +97,68 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+# Define a route for the home page
+@app.route("/")
+def home():
+    current_date = datetime.now().date()
+
+    # Get the Fuse date
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+    if fuse_date is None:
+        fuse_date = "Not set"
+    else:
+        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+        app.logger.info(f"Fuse date: {fuse_date}")
+        app.logger.info(f"Current date: {current_date}")
+    return render_template(
+        "index.html", fuse_date=fuse_date_obj, current_date=current_date
+    )
+
+
+@app.route("/set_fuse_date", methods=["GET", "POST"])
+def set_fuse_date():
+    if request.method == "POST":
+        # Get the new fuse date from the form
+        new_fuse_date = request.form["new_fuse_date"]
+        app.logger.info(f"New fuse date: {new_fuse_date}")
+
+        try:
+            # Update the Fuse date in MongoDB
+            FuseDate().set_fuse_date(Mongo_Connection_URI, new_fuse_date)
+
+            # Redirect to the home page after updating
+            return redirect(url_for("home"))
+        except ValueError:
+            # Handle invalid date format
+            error_message = (
+                "Invalid date format. Please enter the date in YYYY-MM-DD format."
+            )
+            return render_template("set_fuse_date.html", error=error_message)
+
+    # Get the Fuse date
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+    current_date = date.today()
+
+    if fuse_date is None:
+        fuse_date = "Not set"
+    else:
+        try:
+            fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+        except ValueError:
+            app.logger.error(f"Invalid date format: {fuse_date}")
+            fuse_date = "Invalid date"
+        else:
+            if fuse_date_obj < current_date:
+                fuse_date = fuse_date_obj
+            else:
+                app.logger.info(f"Fuse date: {fuse_date_obj}")
+                app.logger.info(f"Current date: {current_date}")
+
+    return render_template(
+        "set_fuse_date.html", fuse_date=fuse_date_obj, current_date=current_date
+    )
+
+
 @app.route("/upload", methods=["GET", "POST"])
 def upload_file():
     if request.method == "POST":
@@ -146,7 +208,7 @@ def upload_file():
             "upload.html",
             message="File uploaded successfully",
             filename=filename,
-            data=df.to_html(index=False, classes='table table-striped'),
+            data=df.to_html(index=False, classes="table table-striped"),
             file_size=file_size,
             upload_time=upload_time,
         )
@@ -154,28 +216,11 @@ def upload_file():
     return render_template("upload.html")
 
 
-# Define a route for the home page
-@app.route('/')
-def home():
-    current_date = datetime.now().date()
-
-    # Get the Fuse date
-    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
-    if fuse_date is None:
-        fuse_date = "Not set"
-    else:
-        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
-        app.logger.info(f"Fuse date: {fuse_date}")
-        app.logger.info(f"Current date: {current_date}")
-    return render_template(
-        "index.html", fuse_date=fuse_date_obj, current_date=current_date
-    )
-
-
 # Define a route for the about page
-@app.route('/about')
+@app.route("/about")
 def about():
-    return render_template('about.html')
+    return render_template("about.html")
+
 
 @app.route("/favicon.ico")
 def favicon():
@@ -183,49 +228,6 @@ def favicon():
         os.path.join(app.root_path, "static"),
         "favicon.ico",
         mimetype="image/vnd.microsoft.icon",
-    )
-
-@app.route("/set_fuse_date", methods=["GET", "POST"])
-def set_fuse_date():
-    if request.method == "POST":
-        # Get the new fuse date from the form
-        new_fuse_date = request.form["new_fuse_date"]
-        app.logger.info(f"New fuse date: {new_fuse_date}")
-
-        try:
-            # Update the Fuse date in MongoDB
-            FuseDate().set_fuse_date(Mongo_Connection_URI, new_fuse_date)
-
-            # Redirect to the home page after updating
-            return redirect(url_for("home"))
-        except ValueError:
-            # Handle invalid date format
-            error_message = (
-                "Invalid date format. Please enter the date in YYYY-MM-DD format."
-            )
-            return render_template("set_fuse_date.html", error=error_message)
-
-    # Get the Fuse date
-    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
-    current_date = date.today()
-
-    if fuse_date is None:
-        fuse_date = "Not set"
-    else:
-        try:
-            fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
-        except ValueError:
-            app.logger.error(f"Invalid date format: {fuse_date}")
-            fuse_date = "Invalid date"
-        else:
-            if fuse_date_obj < current_date:
-                fuse_date = fuse_date_obj
-            else:
-                app.logger.info(f"Fuse date: {fuse_date_obj}")
-                app.logger.info(f"Current date: {current_date}")
-
-    return render_template(
-        "set_fuse_date.html", fuse_date=fuse_date_obj, current_date=current_date
     )
 
 

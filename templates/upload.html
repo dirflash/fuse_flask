@@ -13,8 +13,9 @@
 {% endif %}
 <div class="form-container">
   <form method="POST" action="/upload" enctype="multipart/form-data">
-    <input type="file" name="file" />
+    <input type="file" name="file" accept=".csv" />
     <input type="submit" value="Upload" />
   </form>
+  <p>Only .csv files are accepted.</p>
 </div>
 {% endblock %}
