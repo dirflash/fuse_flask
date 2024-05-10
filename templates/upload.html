@@ -1,39 +1,20 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>File Upload</title>
-    <link
-      rel="shortcut icon"
-      href="{{ url_for('static', filename='images/favicon.ico') }}"
-    />
-    <style>
-      .table-container {
-        height: 400px; /* Adjust the height as needed */
-        overflow: auto; /* Enable scrolling */
-      }
-      .form-container {
-        margin-top: 20px; /* Adjust the value as needed */
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Upload a File</h1>
-    {% if error %}
-    <p style="color: red">{{ error }}</p>
-    {% endif %} {% if message %}
-    <p>{{ message }}</p>
-    {% endif %} {% if filename %}
-    <p>File Name: {{ filename }}</p>
-    <p>File Size: {{ file_size }} bytes</p>
-    <p>Upload Time: {{ upload_time }} seconds</p>
-    {% endif %} {% if data %}
-    <div class="table-container">{{ data|safe }}</div>
-    {% endif %}
-    <div class="form-container">
-      <form method="POST" action="/upload" enctype="multipart/form-data">
-        <input type="file" name="file" />
-        <input type="submit" value="Upload" />
-      </form>
-    </div>
-  </body>
-</html>
+{% extends "base.html" %} {% block content %}
+<h1>Upload a File</h1>
+{% if error %}
+<p style="color: red">{{ error }}</p>
+{% endif %} {% if message %}
+<p>{{ message }}</p>
+{% endif %} {% if filename %}
+<p>File Name: {{ filename }}</p>
+<p>File Size: {{ file_size }} bytes</p>
+<p>Upload Time: {{ upload_time }} seconds</p>
+{% endif %} {% if data %}
+<div class="table-container">{{ data|safe }}</div>
+{% endif %}
+<div class="form-container">
+  <form method="POST" action="/upload" enctype="multipart/form-data">
+    <input type="file" name="file" />
+    <input type="submit" value="Upload" />
+  </form>
+</div>
+{% endblock %}

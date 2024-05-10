@@ -22,6 +22,26 @@ class FuseDate:
         logger.info(f"Fuse date found in MongoDB: {fuse_date}")
         return fuse_date
 
+    def set_fuse_date(self, mongo_connect_uri, fuse_date):
+        """Set Fuse date in Mongo"""
+        new_fuse_date = mongo_connect_uri[pref.MONGODB]["date"].update_one(
+            {"date": fuse_date},
+            {
+                "$set": {
+                    "timestamp": timestamp(),
+                    "date": fuse_date,
+                }
+            },
+            upsert=True,
+        )
+
+        document_id = (
+            new_fuse_date.upserted_id
+            if new_fuse_date.upserted_id is not None
+            else "fuse_date"
+        )
+        logger.info(f"Inserted document id: {document_id}")
+
 
 def timestamp():
     """Return a timestamp in UTC"""

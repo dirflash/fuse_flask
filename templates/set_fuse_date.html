@@ -1,42 +1,29 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Set Fuse Date</title>
-    <link
-      rel="shortcut icon"
-      href="{{ url_for('static', filename='images/favicon.ico') }}"
-    />
-    <link
-      rel="stylesheet"
-      href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
-    />
-    <style>
-      /* Styles to make the date input box shorter */
-      input[type="date"] {
-        width: 180px; /* Adjust the width as desired */
-        padding: 5px; /* Adjust the padding as desired */
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Set Fuse Date</h1>
-      {% if error %}
-      <div class="alert alert-danger">{{ error }}</div>
-      {% endif %}
-      <form method="post" action="{{ url_for('set_fuse_date') }}">
-        <div class="form-group">
-          <label for="new_fuse_date">New Fuse Date:</label>
-          <input
-            type="date"
-            class="form-control"
-            id="new_fuse_date"
-            name="new_fuse_date"
-            required
-          />
-        </div>
-        <button type="submit" class="btn btn-primary">Submit</button>
-      </form>
+{% extends "base.html" %} {% block content %}
+  <h1>Set Fuse Date</h1>
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+  {% if fuse_date == "Not set" %}
+  <p>Fuse Date: Not set</p>
+  {% else %}
+  <p>
+    Fuse Date:
+    <span class="{% if fuse_date < current_date %} expired {% endif %}">
+      {{ fuse_date }}
+    
+  </p>
+  {% endif %}
+  <form method="post" action="{{ url_for('set_fuse_date') }}">
+    <div class="form-group">
+      <label for="new_fuse_date">New Fuse Date:</label>
+      <input
+        type="date"
+        class="form-control"
+        id="new_fuse_date"
+        name="new_fuse_date"
+        required
+      />
     </div>
-  </body>
-</html>
+    <button type="submit" class="btn btn-primary">Submit</button>
+  </form>
+{% endblock %}

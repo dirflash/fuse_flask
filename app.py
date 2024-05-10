@@ -1,8 +1,7 @@
 import logging
 import os
 import time
-from datetime import datetime
-from logging.handlers import RotatingFileHandler
+from datetime import date, datetime
 
 import certifi
 import pandas as pd
@@ -32,20 +31,20 @@ console_formatter = logging.Formatter(
 )
 console_handler.setFormatter(console_formatter)
 
-# Set up file logging
+"""# Set up file logging
 log_file = os.path.join(app.root_path, "logs", "flask_app.log")
 file_handler = RotatingFileHandler(log_file, maxBytes=10000, backupCount=5)
 file_handler.setLevel(logging.DEBUG)
 file_formatter = logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-file_handler.setFormatter(file_formatter)
+file_handler.setFormatter(file_formatter)"""
 
 # Configure the root logger
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.DEBUG)
 root_logger.addHandler(console_handler)
-root_logger.addHandler(file_handler)
+# root_logger.addHandler(file_handler)
 
 app.logger.info("Application started")
 
@@ -84,16 +83,6 @@ Mongo_Connection_URI: MongoClient = MongoClient(
         # Close connection to Mongo
         Mongo_Connection_URI.close()
         app.logger.info("Closed connection to MongoDB.")"""
-
-
-"""scheduler = BackgroundScheduler()
-scheduler.add_job(
-    func=lambda: print("Scheduler task running."), trigger="interval", seconds=60
-)
-scheduler.start()
-
-# Ensure that the scheduler is shut down properly on application exit
-atexit.register(lambda: scheduler.shutdown(wait=False))"""
 
 
 def allowed_file(filename):
@@ -168,20 +157,19 @@ def upload_file():
 # Define a route for the home page
 @app.route('/')
 def home():
-    """Get the Fuse date"""
+    current_date = datetime.now().date()
+
+    # Get the Fuse date
     fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
     if fuse_date is None:
         fuse_date = "Not set"
     else:
-        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d")
-        current_time = datetime.now()
-        if fuse_date_obj < current_time:
-            fuse_date = "Expired"
-            return redirect(url_for("set_fuse_date"))
-        else:
-            app.logger.info(f"Fuse date: {fuse_date_obj}")
-            app.logger.info(f"Current time: {current_time}")
-    return render_template("index.html", fuse_date=fuse_date)
+        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+        app.logger.info(f"Fuse date: {fuse_date}")
+        app.logger.info(f"Current date: {current_date}")
+    return render_template(
+        "index.html", fuse_date=fuse_date_obj, current_date=current_date
+    )
 
 
 # Define a route for the about page
@@ -205,10 +193,8 @@ def set_fuse_date():
         app.logger.info(f"New fuse date: {new_fuse_date}")
 
         try:
-            # Convert the new fuse date to a datetime object
-            new_fuse_date_obj = datetime.strptime(new_fuse_date, "%Y-%m-%d")
-
-            # Update the MongoDB document with the new fuse date
+            # Update the Fuse date in MongoDB
+            FuseDate().set_fuse_date(Mongo_Connection_URI, new_fuse_date)
 
             # Redirect to the home page after updating
             return redirect(url_for("home"))
@@ -219,18 +205,32 @@ def set_fuse_date():
             )
             return render_template("set_fuse_date.html", error=error_message)
 
-    return render_template("set_fuse_date.html")
+    # Get the Fuse date
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+    current_date = date.today()
+
+    if fuse_date is None:
+        fuse_date = "Not set"
+    else:
+        try:
+            fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+        except ValueError:
+            app.logger.error(f"Invalid date format: {fuse_date}")
+            fuse_date = "Invalid date"
+        else:
+            if fuse_date_obj < current_date:
+                fuse_date = fuse_date_obj
+            else:
+                app.logger.info(f"Fuse date: {fuse_date_obj}")
+                app.logger.info(f"Current date: {current_date}")
+
+    return render_template(
+        "set_fuse_date.html", fuse_date=fuse_date_obj, current_date=current_date
+    )
 
 
 if __name__ == "__main__":
-    try:
-        app.run(
-            debug=True, use_reloader=False
-        )  # Disable reloader if you handle the shutdown manually
-    except (KeyboardInterrupt, SystemExit):
-        pass
-    finally:
-        # scheduler.shutdown(wait=False)
-        print("Scheduler has been shut down.")
+    app.run(debug=True)
 
+# flask --app app run --debug
 # app.py
