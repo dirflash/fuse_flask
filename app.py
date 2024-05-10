@@ -55,14 +55,7 @@ Mongo_Connection_URI: MongoClient = MongoClient(
 
 
 def allowed_file(filename):
-    """Defines allowed file extensions to be uploaded
-
-    Args:
-        filename (str): uploaded filename
-
-    Returns:
-        str: file extension if in ALLOWED_EXTENSIONS
-    """
+    """Defines allowed file extensions to be uploaded"""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
