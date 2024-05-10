@@ -2,6 +2,7 @@ __pycache__
 .mypy_cache
 .venv
 .vscode
+.old
 *.ipynb
 /logs/*
 /logging/*

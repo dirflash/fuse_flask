@@ -5,14 +5,8 @@ from datetime import date, datetime
 
 import certifi
 import pandas as pd
-from flask import (
-    Flask,
-    redirect,
-    render_template,
-    request,
-    send_from_directory,
-    url_for,
-)
+from flask import (Flask, redirect, render_template, request,
+                   send_from_directory, url_for)
 from pymongo import MongoClient
 from werkzeug.utils import secure_filename
 
@@ -25,7 +19,6 @@ app = Flask(__name__)
 
 # Set up console logging
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
 console_formatter = logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -56,33 +49,9 @@ ALLOWED_EXTENSIONS = {"csv"}
 # Setup the MongoDB connection
 Mongo_Connection_URI: MongoClient = MongoClient(
     f"{pref.MONGO_URI}?retryWrites=true&w=majority",
-    tlsCAFile=certifi.where(),serverSelectionTimeoutMS=500
+    tlsCAFile=certifi.where(),
+    serverSelectionTimeoutMS=500,
 )
-
-"""def check_mongo_connection():
-    # Test the MongoDB connection
-    try:
-        Mongo_Connection_URI.server_info()
-        app.logger.info("Test connection to MongoDB successful.")
-    except ConnectionFailure as mongo_connection_failure:
-        app.logger.error("Failed to connect to MongoDB")
-        app.logger.error(mongo_connection_failure)
-        return render_template(
-            "notification.html"
-        ), 503  # Return notification page with 503 Service Unavailable status
-    except OperationFailure as mongo_operation_failure:
-        error_details = mongo_operation_failure.details
-        app.logger.error(
-            f"*** Failed to connect to MongoDB.***"
-            f"Error Message: {error_details['errmsg']}"
-        )
-        return render_template(
-            "notification.html"
-        ), 500  # Return notification page with 500 Internal Server Error
-    else:
-        # Close connection to Mongo
-        Mongo_Connection_URI.close()
-        app.logger.info("Closed connection to MongoDB.")"""
 
 
 def allowed_file(filename):
@@ -100,6 +69,7 @@ def allowed_file(filename):
 # Define a route for the home page
 @app.route("/")
 def home():
+    app.logger.info("Home page route...")
     current_date = datetime.now().date()
 
     # Get the Fuse date
@@ -118,6 +88,7 @@ def home():
 @app.route("/set_fuse_date", methods=["GET", "POST"])
 def set_fuse_date():
     if request.method == "POST":
+        app.logger.info("Set fuse date route...")
         # Get the new fuse date from the form
         new_fuse_date = request.form["new_fuse_date"]
         app.logger.info(f"New fuse date: {new_fuse_date}")
@@ -135,6 +106,7 @@ def set_fuse_date():
             )
             return render_template("set_fuse_date.html", error=error_message)
 
+    app.logger.info("Get fuse date route...")
     # Get the Fuse date
     fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
     current_date = date.today()
@@ -161,7 +133,9 @@ def set_fuse_date():
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload_file():
+    app.logger.info("File upload route...")
     if request.method == "POST":
+        app.logger.info("File upload post route...")
         # Check if a file was uploaded
         if "file" not in request.files:
             return render_template("upload.html", error="No file uploaded")
@@ -193,7 +167,6 @@ def upload_file():
         # Save the file to the uploads folder
         filename = secure_filename(file.filename)
         file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(file_path)
 
         # Read the file into a Pandas DataFrame
         df = pd.read_csv(file_path)
@@ -216,9 +189,21 @@ def upload_file():
     return render_template("upload.html")
 
 
+# Define a route to process the uploaded CSV file
+@app.route("/process_csv", methods=["GET", "POST"])
+def process_csv():
+    app.logger.info("Process CSV file route...")
+    filename = "None"
+    app.logger.info(f"File name: {filename}")
+    if filename is None:
+        return render_template("process_csv.html", filename="None")
+    return render_template("process_csv.html", filename=filename)
+
+
 # Define a route for the about page
 @app.route("/about")
 def about():
+    app.logger.info("About page route...")
     return render_template("about.html")
 
 
@@ -231,7 +216,7 @@ def favicon():
     )
 
 
-if __name__ == "__main__":
+if __name__ == "__app__":
     app.run(debug=True)
 
 # flask --app app run --debug
