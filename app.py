@@ -160,6 +160,7 @@ def upload_file():
         # Save the file to the uploads folder
         filename = secure_filename(file.filename)
         file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(file_path)
 
         # Read the file into a Pandas DataFrame
         df = pd.read_csv(file_path)
