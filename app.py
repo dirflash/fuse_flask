@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 import modules.preferences.preferences as pref
 from flask_session import Session
 from modules.fuse_date import FuseDate
+from modules.process_attachment import ProcessAttachment
 
 # pylint: disable=logging-fstring-interpolation
 
@@ -28,7 +29,7 @@ Session(app)
 # Set up console logging
 console_handler = logging.StreamHandler()
 console_formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    "%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s"
 )
 console_handler.setFormatter(console_formatter)
 
@@ -130,10 +131,16 @@ def home():
 
     # Get the Fuse date
     fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+    session["X-FuseDate"] = fuse_date
+    fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
     if fuse_date is None:
         fuse_date = "Not set"
+    elif fuse_date_obj < current_date:
+        fuse_date = "Expired"
+        app.logger.info("Fuse date expired")
+        flash("Fuse date needs to be set.")
+        return redirect(url_for("set_fuse_date"))
     else:
-        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
         app.logger.info(f"Fuse date: {fuse_date}")
         app.logger.info(f"Current date: {current_date}")
     return render_template(
@@ -157,6 +164,7 @@ def set_fuse_date():
         # Get the new fuse date from the form
         new_fuse_date = request.form["new_fuse_date"]
         app.logger.info(f"New fuse date: {new_fuse_date}")
+        session["X-FuseDate"] = new_fuse_date
 
         try:
             # Update the Fuse date in MongoDB
@@ -264,10 +272,17 @@ def upload_file():
 def process_csv():
     app.logger.info("Process CSV file route...")
     filename = session.get("X-Filename")
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
     app.logger.info(f"File name: {filename}")
     if filename is None:
         return render_template("process_csv.html", filename="None")
-    return render_template("process_csv.html", filename=filename)
+    else:
+        accept, decline, tentative, no_response = ProcessAttachment(fuse_date, filename, Mongo_Connection_URI).process()
+    return render_template(
+        "process_csv.html",
+        filename=filename, accept=accept, decline=decline,
+        tentative=tentative, no_response=no_response
+    )
 
 
 # Define a route for the about page

@@ -7,6 +7,8 @@ import modules.preferences.preferences as pref
 
 # pylint: disable=logging-fstring-interpolation
 
+# Logging to Flask console
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -15,8 +17,11 @@ class FuseDate:
 
     def get_fuse_date(self, mongo_connect_uri):
         # Get Fuse date from Mongo
-        fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
+        '''fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
             {}, sort=[("date", DESCENDING)]
+        )'''
+        fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
+            {}, sort=[("_id", DESCENDING)]
         )
         fuse_date = fuse_date_record["date"]
         logger.info(f"Fuse date found in MongoDB: {fuse_date}")

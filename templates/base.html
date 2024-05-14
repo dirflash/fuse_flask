@@ -29,6 +29,30 @@
       .underline-link {
         text-decoration: underline;
       }
+      .footer .content p {
+        margin-bottom: 0; /* Remove bottom margin from paragraphs */
+      }
+      table {
+        width: 25%;
+        margin: 0 auto;
+        border-collapse: collapse;
+      }
+
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
+
+      th,
+      td {
+        padding: 8px;
+        text-align: left;
+      }
+
+      thead {
+        background-color: inherit;
+      }
     </style>
   </head>
 
@@ -78,6 +102,10 @@
       <p>Session Username: {{ session["username"] }}</p>
       {% else %}
       <p>Session Username: Not set</p>
+      {% endif %} {% if session["X-FuseDate"] %}
+      <p>Fuse Date: {{ session["X-FuseDate"] }}</p>
+      {% else %}
+      <p>Fuse Date: Not set</p>
       {% endif %}
     </div>
   </footer>
