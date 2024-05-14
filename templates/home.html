@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Welcome to FUSE Management!</h1>
+  {% if session.username and session.username != "Not Set" %}
+    {% if fuse_date == "Not set" %}
+    <p>Current Fuse Date: Not set</p>
+    {% else %}
+    <p>
+      Current Fuse Date:
+      <span class="{% if fuse_date < current_date %} expired {% endif %}">
+        {{ fuse_date }}
+    </p>
+    {% endif %}
+  {% else %}
+    <p><a href="/login" class="underline-link">Login Required</a></p>
+  {% endif %}
+  {% endblock %}

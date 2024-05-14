@@ -4,6 +4,7 @@ __pycache__
 .vscode
 .old
 *.ipynb
+/flask_session/*
 /logs/*
 /logging/*
 /uploads/*

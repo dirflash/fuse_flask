@@ -26,10 +26,17 @@
       .form-container {
         margin-top: 20px;
       }
+      .underline-link {
+        text-decoration: underline;
+      }
     </style>
   </head>
 
   <body>
+    {% with messages = get_flashed_messages() %} {% if messages %} {% for
+    message in messages %}
+    <div>{{ message }}</div>
+    {% endfor %} {% endif %} {% endwith %}
     <section class="hero is-primary is-fullheight">
       <div class="hero-head">
         <nav class="navbar">
@@ -37,6 +44,7 @@
             <div id="navbarMenuHeroA" class="navbar-menu">
               <div class="navbar-end">
                 <a href="{{ url_for('home') }}" class="navbar-item"> Home </a>
+                <a href="{{ url_for('login') }}" class="navbar-item"> Login </a>
                 <a href="{{ url_for('set_fuse_date') }}" class="navbar-item">
                   Set Fuse Date
                 </a>
@@ -45,6 +53,9 @@
                 </a>
                 <a href="{{ url_for('process_csv') }}" class="navbar-item">
                   Process CSV File
+                </a>
+                <a href="{{ url_for('logout') }}" class="navbar-item">
+                  Logout
                 </a>
                 <a href="{{ url_for('about') }}" class="navbar-item"> About </a>
               </div>
@@ -60,4 +71,14 @@
       </div>
     </section>
   </body>
+
+  <footer class="footer">
+    <div class="content">
+      {% if session["username"] %}
+      <p>Session Username: {{ session["username"] }}</p>
+      {% else %}
+      <p>Session Username: Not set</p>
+      {% endif %}
+    </div>
+  </footer>
 </html>

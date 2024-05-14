@@ -2,20 +2,28 @@ import logging
 import os
 import time
 from datetime import date, datetime
+from functools import wraps
 
 import certifi
 import pandas as pd
-from flask import (Flask, redirect, render_template, request,
-                   send_from_directory, url_for)
+from flask import (Flask, flash, g, make_response, redirect, render_template,
+                   request, send_from_directory, session, url_for)
 from pymongo import MongoClient
 from werkzeug.utils import secure_filename
 
 import modules.preferences.preferences as pref
+from flask_session import Session
 from modules.fuse_date import FuseDate
 
 # pylint: disable=logging-fstring-interpolation
 
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_TYPE"] = "filesystem"
+app.config['SESSION_FILE_DIR'] = 'flask_session'
+app.config['SESSION_FILE_THRESHOLD'] = 500
+Session(app)
 
 # Set up console logging
 console_handler = logging.StreamHandler()
@@ -23,6 +31,8 @@ console_formatter = logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 console_handler.setFormatter(console_formatter)
+
+app.logger.addHandler(console_handler)
 
 """# Set up file logging
 log_file = os.path.join(app.root_path, "logs", "flask_app.log")
@@ -32,12 +42,6 @@ file_formatter = logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 file_handler.setFormatter(file_formatter)"""
-
-# Configure the root logger
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)
-root_logger.addHandler(console_handler)
-# root_logger.addHandler(file_handler)
 
 app.logger.info("Application started")
 
@@ -59,11 +63,70 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# Define a route for the home page
+def login_required(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        app.logger.info(f"Session contents: {session}")
+        if "logged_in" in session:
+            app.logger.info("Logged in...")
+            return f(*args, **kwargs)
+        else:
+            app.logger.info("Not logged in. Redirect to login...")
+            flash("You need to login first.")
+            return redirect(url_for("login"))
+    return wrap
+
+
+# Define a route for the default page
 @app.route("/")
+def default():
+    app.logger.info("Default page route...")
+    username = session.get("username")
+    app.logger.info(f"Username: {username}")
+    return redirect(url_for("home"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        # Get the username and password from the form
+        username = request.form["username"]
+        password = request.form["password"]
+
+        # Check if the username and password are valid
+        if username == "admin" and password == "admin":
+            # Store the username in the session
+            session["username"] = username
+            session["logged_in"] = True
+
+            # Redirect to the home page
+            return redirect(url_for("home"))
+
+        # If the username or password is invalid, show an error message
+        flash("Invalid username or password. Please try again.")
+
+    # If the request method is GET, show the login form
+    return render_template("login.html")
+
+
+@app.route("/logout/")
+def logout():
+    app.logger.info("Logout route...")
+    # Clear the session
+    session.clear()
+    # Redirect to the home page
+    return redirect(url_for("default"))
+
+
+# Define a route for the home page
+@app.route("/home")
+# @login_required
 def home():
-    app.logger.info("Home page route...")
     current_date = datetime.now().date()
+    username = session.get("username")
+    # if username not 'None', log username
+    if username is not None:
+        app.logger.info(f"{username} accessed the home page route...")
 
     # Get the Fuse date
     fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
@@ -74,11 +137,20 @@ def home():
         app.logger.info(f"Fuse date: {fuse_date}")
         app.logger.info(f"Current date: {current_date}")
     return render_template(
-        "index.html", fuse_date=fuse_date_obj, current_date=current_date
+        "home.html", fuse_date=fuse_date_obj, current_date=current_date, username=username
     )
 
 
+@app.route("/get_session")
+@login_required
+def get_session():
+    app.logger.info("Get session route...")
+    username = session.get("username")
+    return make_response(f"<h1>Username: {username}</h1>")
+
+
 @app.route("/set_fuse_date", methods=["GET", "POST"])
+@login_required
 def set_fuse_date():
     if request.method == "POST":
         app.logger.info("Set fuse date route...")
@@ -125,6 +197,7 @@ def set_fuse_date():
 
 
 @app.route("/upload", methods=["GET", "POST"])
+@login_required
 def upload_file():
     app.logger.info("File upload route...")
     if request.method == "POST":
@@ -171,23 +244,26 @@ def upload_file():
         # Get file metadata
         file_size = os.path.getsize(file_path)
 
-        return render_template(
+        # Set filename session cookie
+        session["X-Filename"] = filename
+
+        response = make_response(render_template(
             "upload.html",
             message="File uploaded successfully",
             filename=filename,
             data=df.to_html(index=False, classes="table table-striped"),
             file_size=file_size,
-            upload_time=upload_time,
-        )
-
+            upload_time=upload_time,))
+        return make_response(response)
     return render_template("upload.html")
 
 
 # Define a route to process the uploaded CSV file
 @app.route("/process_csv", methods=["GET", "POST"])
+@login_required
 def process_csv():
     app.logger.info("Process CSV file route...")
-    filename = "None"
+    filename = session.get("X-Filename")
     app.logger.info(f"File name: {filename}")
     if filename is None:
         return render_template("process_csv.html", filename="None")
