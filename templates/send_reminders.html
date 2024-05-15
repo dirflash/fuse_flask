@@ -1,0 +1,36 @@
+{% extends "base.html" %} {% block content %}
+<h1>Send Reminders!</h1>
+{% if found is none %}
+<p>Records not found!</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Status</th>
+      <th>Count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Accepted</td>
+      <td>{{ accept }}</td>
+    </tr>
+    <tr>
+      <td>Declined</td>
+      <td>{{ decline }}</td>
+    </tr>
+    <tr>
+      <td>Tentative</td>
+      <td>{{ tentative }}</td>
+    </tr>
+    <tr>
+      <td>No Response</td>
+      <td>{{ no_response }}</td>
+    </tr>
+    <tr>
+      <td>Total</td>
+      <td>{{ accept + decline + tentative + no_response }}</td>
+    </tr>
+  </tbody>
+</table>
+{% endif %} {% endblock %}

@@ -15,6 +15,7 @@ import modules.preferences.preferences as pref
 from flask_session import Session
 from modules.fuse_date import FuseDate
 from modules.process_attachment import ProcessAttachment
+from modules.reminders import Reminders
 
 # pylint: disable=logging-fstring-interpolation
 
@@ -282,6 +283,38 @@ def process_csv():
         "process_csv.html",
         filename=filename, accept=accept, decline=decline,
         tentative=tentative, no_response=no_response
+    )
+
+
+# Define a route to send reminders
+@app.route("/send_reminders", methods=["GET", "POST"])
+@login_required
+def send_reminders():
+    app.logger.info("Send reminders route...")
+    fuse_date = session.get("X-FuseDate")
+    fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+    if fuse_date is None:
+        app.logger.info("Fuse date not set")
+        flash("Fuse date needs to be set.")
+        return redirect(url_for("set_fuse_date"))
+    try:
+        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+    except ValueError:
+        app.logger.error(f"Invalid date format: {fuse_date}")
+        flash("Invalid date format.")
+        return redirect(url_for("set_fuse_date"))
+    if fuse_date_obj < date.today():
+        app.logger.info("Fuse date expired")
+        flash("Fuse date needs to be set.")
+        return redirect(url_for("set_fuse_date"))
+    else:
+        record_found, remind_accepted, remind_declined, remind_tentative, remind_no_response = Reminders(
+            fuse_date, Mongo_Connection_URI
+        ).send_reminders()
+    return render_template(
+        "send_reminders.html",
+        found=record_found, accept=remind_accepted, decline=remind_declined,
+        tentative=remind_tentative, no_response=remind_no_response
     )
 
 
