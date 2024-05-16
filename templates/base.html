@@ -103,12 +103,13 @@
     <div class="content">
       {% if session["username"] %}
       <p>Session Username: {{ session["username"] }}</p>
-      {% else %}
-      <p>Session Username: Not set</p>
-      {% endif %} {% if session["X-FuseDate"] %}
+      {% if session["X-FuseDate"] %}
       <p>Fuse Date: {{ session["X-FuseDate"] }}</p>
       {% else %}
       <p>Fuse Date: Not set</p>
+      {% endif %} {% else %}
+      <p>Session Username: Not set</p>
+      <p>Fuse Date: Not available</p>
       {% endif %}
     </div>
   </footer>

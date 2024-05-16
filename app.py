@@ -130,20 +130,23 @@ def home():
     if username is not None:
         app.logger.info(f"{username} accessed the home page route...")
 
-    # Get the Fuse date
-    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
-    session["X-FuseDate"] = fuse_date
-    fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
-    if fuse_date is None:
-        fuse_date = "Not set"
-    elif fuse_date_obj < current_date:
-        fuse_date = "Expired"
-        app.logger.info("Fuse date expired")
-        flash("Fuse date needs to be set.")
-        return redirect(url_for("set_fuse_date"))
+        # Get the Fuse date
+        fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+        session["X-FuseDate"] = fuse_date
+        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+        if fuse_date is None:
+            fuse_date = "Not set"
+        elif fuse_date_obj < current_date:
+            fuse_date = "Expired"
+            app.logger.info("Fuse date expired")
+            flash("Fuse date needs to be set.")
+            return redirect(url_for("set_fuse_date"))
+        else:
+            app.logger.info(f"Fuse date: {fuse_date}")
+            app.logger.info(f"Current date: {current_date}")
     else:
-        app.logger.info(f"Fuse date: {fuse_date}")
-        app.logger.info(f"Current date: {current_date}")
+        app.logger.info("No username found in session")
+        fuse_date_obj = None
     return render_template(
         "home.html", fuse_date=fuse_date_obj, current_date=current_date, username=username
     )
@@ -311,10 +314,11 @@ def send_reminders():
         record_found, remind_accepted, remind_declined, remind_tentative, remind_no_response = Reminders(
             fuse_date, Mongo_Connection_URI
         ).send_reminders()
+        total_count = len(remind_accepted) + len(remind_declined) + len(remind_tentative) + len(remind_no_response)
     return render_template(
         "send_reminders.html",
-        found=record_found, accept=remind_accepted, decline=remind_declined,
-        tentative=remind_tentative, no_response=remind_no_response
+        found=record_found, accept=len(remind_accepted), decline=len(remind_declined),
+        tentative=len(remind_tentative), no_response=len(remind_no_response), total=total_count
     )
 
 

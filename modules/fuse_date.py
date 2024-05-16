@@ -21,7 +21,7 @@ class FuseDate:
             {}, sort=[("date", DESCENDING)]
         )'''
         fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
-            {}, sort=[("_id", DESCENDING)]
+            {}, sort=[("timestamp", DESCENDING), ("_id", DESCENDING)]
         )
         fuse_date = fuse_date_record["date"]
         logger.info(f"Fuse date found in MongoDB: {fuse_date}")
