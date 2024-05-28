@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from time import sleep
 
@@ -126,32 +127,38 @@ async def main(fuse_date):
             logger.info(f"Processing {len(results)} results")
             operations = []
             for result in results:
-                logger.info(f"Processing result: {result}")
-                # Assuming that result[1] is the email
-                alias = result[1].replace("@cisco.com", "") if len(result) > 1 else None
-                try:
-                    # Attempt to unpack the tuple
-                    message_id, email, status = result
-                    logger.info(f"Adding {email} message to reminders database")
-                    # Add the UpdateOne operation to the list
-                    operations.append(
-                        UpdateOne(
-                            {"date": fuse_date, "alias": alias},
-                            {
-                                "$set": {
-                                    "message_id": message_id,
-                                    "email": email,
-                                    "status": status,
-                                }
-                            },
-                            upsert=True,
+                if result is not None:
+                    logger.info(f"Processing result: {result}")
+                    # Assuming that result[1] is the email
+                    alias = (
+                        result[1].replace("@cisco.com", "") if len(result) > 1 else None
+                    )
+                    try:
+                        # Attempt to unpack the tuple
+                        message_id, email, status = result
+                        logger.info(f"Adding {email} message to reminders database")
+                        # Create timestamp for Mountain Time Zone
+                        ts = datetime.now()
+                        # Add the UpdateOne operation to the list
+                        operations.append(
+                            UpdateOne(
+                                {"date": fuse_date, "alias": alias},
+                                {
+                                    "$set": {
+                                        "message_id": message_id,
+                                        "email": email,
+                                        "status": status,
+                                        "timestamp": ts,
+                                    }
+                                },
+                                upsert=True,
+                            )
                         )
-                    )
-                except (TypeError, ValueError) as te:
-                    # Log an error message if unpacking fails
-                    logger.error(
-                        f"Error unpacking result for record {alias}: {te} - skipping record"
-                    )
+                    except (TypeError, ValueError) as te:
+                        # Log an error message if unpacking fails
+                        logger.error(
+                            f"Error unpacking result for record {alias}: {te} - skipping record"
+                        )
 
             if operations:
                 logger.info(f"Operations to execute: {len(operations)}")
