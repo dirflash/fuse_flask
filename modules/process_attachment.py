@@ -84,7 +84,9 @@ class ProcessAttachment:
         # Does cwa_attendees record exist for this date?
         for _ in range(5):
             try:
-                if self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].find_one({"date": self.fuse_date}):
+                if self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].find_one(
+                    {"date": self.fuse_date}
+                ):
                     self.logger.info(f" Record for {self.fuse_date} exists in prematch table.")
                 else:
                     # Create the record
@@ -94,7 +96,7 @@ class ProcessAttachment:
                     self.logger.info(f" Record for {self.fuse_date} created in prematch table.")
                 break
             except ConnectionFailure as cf:
-                self.logger.error(" Connection Failure looking up attendees record: ", cf)
+                self.logger.error(f" Connection Failure looking up attendees record: {cf}")
                 self.logger.warning("  *** Sleeping for {pow(2, _)} seconds and trying again ***")
                 sleep(pow(2, _))
 
@@ -112,7 +114,7 @@ class ProcessAttachment:
                 all_entries = accept_list + decline_list + tentative_list + no_response_list
 
                 # First, remove entries from all statuses
-                self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_one(
+                update_result = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_one(
                     {"date": self.fuse_date},
                     {
                         "$pull": {
@@ -123,9 +125,25 @@ class ProcessAttachment:
                         }
                     }
                 )
+                self.logger.info(f"Updated {update_result.modified_count} documents.")
+
+                # Remove any documents that are not in any of the lists
+                # WARNING: This operation will delete data from your database. Use with caution.
+                update_result = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_many(
+                    {"date": self.fuse_date},
+                    {
+                        "$pull": {
+                            "accepted": {"$nin": accept_list},
+                            "declined": {"$nin": decline_list},
+                            "tentative": {"$nin": tentative_list},
+                            "no_response": {"$nin": no_response_list},
+                        }
+                    }
+                )
+                self.logger.info(f"Updated {update_result.modified_count} documents.")
 
                 # Next, add entries to their respective current status using $addToSet
-                self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_one(
+                update_result = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_one(
                     {"date": self.fuse_date},
                     {
                         "$addToSet": {
@@ -136,9 +154,12 @@ class ProcessAttachment:
                         }
                     }
                 )
+                self.logger.info(f"Updated {update_result.modified_count} documents.")
                 break
             except ConnectionFailure as cf:
-                self.logger.error(" Connection Failure adding responses to attendees database: ", cf)
+                self.logger.error(
+                    f" Connection Failure adding responses to attendees database: {cf}"
+                )
                 self.logger.warning("  *** Sleeping for {pow(2, _)} seconds and trying again ***")
                 sleep(pow(2, _))
         return (len(accept), len(decline), len(tentative), len(no_response))

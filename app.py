@@ -3,10 +3,11 @@ import os
 import time
 from datetime import date, datetime
 from functools import wraps
+from logging.handlers import RotatingFileHandler
 
 import certifi
 import pandas as pd
-from flask import (Flask, flash, g, make_response, redirect, render_template,
+from flask import (Flask, flash, make_response, redirect, render_template,
                    request, send_from_directory, session, url_for)
 from pymongo import MongoClient
 from werkzeug.utils import secure_filename
@@ -20,30 +21,32 @@ from modules.reminders import Reminders
 # pylint: disable=logging-fstring-interpolation
 
 app = Flask(__name__)
-app.logger.setLevel(logging.INFO)
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 app.config['SESSION_FILE_DIR'] = 'flask_session'
 app.config['SESSION_FILE_THRESHOLD'] = 500
 Session(app)
 
-# Set up console logging
-console_handler = logging.StreamHandler()
-console_formatter = logging.Formatter(
+# Set up logging
+log_formatter = logging.Formatter(
     "%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s"
 )
-console_handler.setFormatter(console_formatter)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+
+# File handler - rotating file handler
+file_handler = RotatingFileHandler('./logs/flask_app.log', maxBytes=1000000, backupCount=5)
+file_handler.setFormatter(log_formatter)
+
+handlers = app.logger.handlers[:]
+for handler in handlers:
+    app.logger.removeHandler(handler)
 
 app.logger.addHandler(console_handler)
-
-"""# Set up file logging
-log_file = os.path.join(app.root_path, "logs", "flask_app.log")
-file_handler = RotatingFileHandler(log_file, maxBytes=10000, backupCount=5)
-file_handler.setLevel(logging.DEBUG)
-file_formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-file_handler.setFormatter(file_formatter)"""
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
 
 app.logger.info("Application started")
 
@@ -72,10 +75,9 @@ def login_required(f):
         if "logged_in" in session:
             app.logger.info("Logged in...")
             return f(*args, **kwargs)
-        else:
-            app.logger.info("Not logged in. Redirect to login...")
-            flash("You need to login first.")
-            return redirect(url_for("login"))
+        app.logger.info("Not logged in. Redirect to login...")
+        flash("You need to login first.")
+        return redirect(url_for("login"))
     return wrap
 
 
@@ -132,6 +134,11 @@ def home():
 
         # Get the Fuse date
         fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+        if fuse_date is None:
+            app.logger.info("Fuse date not found")
+            if "X-FuseDate" in session:
+                del session["X-FuseDate"]
+            return redirect(url_for("set_fuse_date"))
         session["X-FuseDate"] = fuse_date
         fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
         if fuse_date is None:
@@ -189,7 +196,8 @@ def set_fuse_date():
     current_date = date.today()
 
     if fuse_date is None:
-        fuse_date = "Not set"
+        fuse_date_obj = "Not set"
+        flash("Fuse date needs to be set.")
     else:
         try:
             fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
@@ -280,8 +288,9 @@ def process_csv():
     app.logger.info(f"File name: {filename}")
     if filename is None:
         return render_template("process_csv.html", filename="None")
-    else:
-        accept, decline, tentative, no_response = ProcessAttachment(fuse_date, filename, Mongo_Connection_URI).process()
+    accept, decline, tentative, no_response = ProcessAttachment(
+        fuse_date, filename, Mongo_Connection_URI
+    ).process()
     return render_template(
         "process_csv.html",
         filename=filename, accept=accept, decline=decline,
@@ -310,16 +319,33 @@ def send_reminders():
         app.logger.info("Fuse date expired")
         flash("Fuse date needs to be set.")
         return redirect(url_for("set_fuse_date"))
-    else:
-        record_found, remind_accepted, remind_declined, remind_tentative, remind_no_response = Reminders(
-            fuse_date, Mongo_Connection_URI
-        ).send_reminders()
-        total_count = len(remind_accepted) + len(remind_declined) + len(remind_tentative) + len(remind_no_response)
-    return render_template(
+    (
+        record_found, remind_accepted, remind_declined,
+        remind_tentative, remind_no_response
+    ) = Reminders(
+        fuse_date, Mongo_Connection_URI
+    ).send_reminders()
+    if record_found is True:
+        app.logger.info("Record found")
+        total_count = sum(
+            len(remind) for remind in [
+                remind_accepted, remind_declined, remind_tentative, remind_no_response
+            ]
+        )
+        return render_template(
+            "send_reminders.html",
+            found=record_found, accept=len(remind_accepted), decline=len(remind_declined),
+            tentative=len(remind_tentative), no_response=len(remind_no_response), total=total_count
+        )
+    total_count = 0
+    # TODO: Create an error page for this case
+    # pylint: disable=pointless-string-statement
+    '''return render_template(
         "send_reminders.html",
         found=record_found, accept=len(remind_accepted), decline=len(remind_declined),
         tentative=len(remind_tentative), no_response=len(remind_no_response), total=total_count
-    )
+    )'''
+    # pylint: enable=pointless-string-statement
 
 
 # Define a route for the about page

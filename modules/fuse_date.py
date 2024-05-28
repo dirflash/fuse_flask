@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from pymongo import DESCENDING
+from pymongo.errors import PyMongoError
 
 import modules.preferences.preferences as pref
 
@@ -16,16 +17,33 @@ class FuseDate:
     """FuseDate class gets/sets the Fuse date from Mongo"""
 
     def get_fuse_date(self, mongo_connect_uri):
-        # Get Fuse date from Mongo
-        '''fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
-            {}, sort=[("date", DESCENDING)]
-        )'''
-        fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
-            {}, sort=[("timestamp", DESCENDING), ("_id", DESCENDING)]
-        )
-        fuse_date = fuse_date_record["date"]
-        logger.info(f"Fuse date found in MongoDB: {fuse_date}")
-        return fuse_date
+        try:
+            # Attempt to get the fuse date from MongoDB
+            fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
+                {}, sort=[("timestamp", DESCENDING), ("_id", DESCENDING)]
+            )
+
+            # Check if a record was found
+            if fuse_date_record is None:
+                logger.error("No fuse date records found in MongoDB.")
+                return None
+
+            # Attempt to retrieve the 'date' field from the record
+            fuse_date = fuse_date_record.get("date")
+            if fuse_date is None:
+                logger.error("The 'date' field is missing in the fuse date record.")
+                return None
+
+            logger.info(f"Fuse date found in MongoDB: {fuse_date}")
+            return fuse_date
+        except PyMongoError as e:
+            # Handle general PyMongo errors
+            logger.error(f"An error occurred while fetching the fuse date from MongoDB: {e}")
+            return None
+        except Exception as e:
+            # Handle other unexpected errors
+            logger.error(f"An unexpected error occurred: {e}")
+            return None
 
     def set_fuse_date(self, mongo_connect_uri, fuse_date):
         """Set Fuse date in Mongo"""
