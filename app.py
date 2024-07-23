@@ -7,8 +7,18 @@ from logging.handlers import RotatingFileHandler
 
 import certifi
 import pandas as pd
-from flask import (Flask, flash, make_response, redirect, render_template,
-                   request, send_from_directory, session, url_for)
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
 from pymongo import MongoClient
 from werkzeug.utils import secure_filename
 
@@ -19,6 +29,7 @@ from modules.process_attachment import ProcessAttachment
 from modules.reminders import Reminders
 
 # pylint: disable=logging-fstring-interpolation
+
 
 app = Flask(__name__)
 app.config["SESSION_PERMANENT"] = False
@@ -66,6 +77,45 @@ Mongo_Connection_URI: MongoClient = MongoClient(
 def allowed_file(filename):
     """Defines allowed file extensions to be uploaded"""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def sample_accepted_message(next_date):
+    current_message = (
+        f"Your current Outlook status for the upcoming FUSE session on {next_date} is ACCEPTED. "
+        f"\n\nTHANK YOU for participating and contributing to strengthening the best group of SAs at Cisco. "
+        f"\n\nWe are excited to welcome a special guest, XXXXXXXXX. "
+        f"\n\nYou will be assigned a FUSE partner, so please get in touch with that person "
+        f"once you have been assigned during the session. "
+        f"\n\nIf your plans change, please send an ACCEPT or DECLINE to the Outlook invite "
+        f"as soon as possible so that the pairings can be adjusted for the day."
+    )
+    return current_message
+
+
+def sample_tentative_message(next_date):
+    current_message = (
+        f"Your current Outlook status for the upcoming FUSE session on {next_date} is TENTATIVE. "
+        f"\n\nTHANK YOU for participating and contributing to strengthening the best group of SAs at Cisco. "
+        f"\n\nWe are excited to welcome a special guest, XXXXXXXXX. "
+        f"\n\nYou will be assigned a FUSE partner, so please get in touch with that person "
+        f"once you have been assigned during the session. "
+        f"\n\nIf your plans change, please send an ACCEPT or DECLINE to the Outlook invite "
+        f"as soon as possible so that the pairings can be adjusted for the day."
+    )
+    return current_message
+
+
+def sample_noresponse_message(next_date):
+    current_message = (
+        f"Your current Outlook status for the upcoming FUSE session on {next_date} is NO RESPONSE. "
+        f"\n\nTHANK YOU for participating and contributing to strengthening the best group of SAs at Cisco. "
+        f"\n\nWe are excited to welcome a special guest, XXXXXXXXX. "
+        f"\n\nYou will be assigned a FUSE partner, so please get in touch with that person "
+        f"once you have been assigned during the session. "
+        f"\n\nIf your plans change, please send an ACCEPT or DECLINE to the Outlook invite "
+        f"as soon as possible so that the pairings can be adjusted for the day."
+    )
+    return current_message
 
 
 def login_required(f):
@@ -303,6 +353,10 @@ def process_csv():
 @login_required
 def send_reminders():
     app.logger.info("Send reminders route...")
+
+    # Check for valid Fuse date
+    # TODO: Convert this to a function
+    app.logger.info("Checking for valid Fuse date...")
     fuse_date = session.get("X-FuseDate")
     fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
     if fuse_date is None:
@@ -319,6 +373,9 @@ def send_reminders():
         app.logger.info("Fuse date expired")
         flash("Fuse date needs to be set.")
         return redirect(url_for("set_fuse_date"))
+
+    # Send reminders
+    app.logger.info("Sending reminders...")
     (
         record_found, remind_accepted, remind_declined,
         remind_tentative, remind_no_response
@@ -348,6 +405,35 @@ def send_reminders():
     # pylint: enable=pointless-string-statement
 
 
+# Define a route to special guest
+@app.route("/guest", methods=["GET", "POST"])
+@login_required
+def special_guest():
+    fuse_date = session.get("X-FuseDate")
+    accepted_message = sample_accepted_message(fuse_date)
+    tentative_message = sample_tentative_message(fuse_date)
+    noresponse_message = sample_noresponse_message(fuse_date)
+    messages = {
+        "accepted": accepted_message,
+        "tentative": tentative_message,
+        "noresponse": noresponse_message,
+    }
+    if request.method == "POST":
+        app.logger.info("Set reminders message...")
+        try:
+            data = request.get_json()
+            for key in messages.keys():  # pylint: disable=consider-using-dict-items
+                if key in data:
+                    messages[key] = data[key]
+                    app.logger.info(f"New {key} received: {data[key]}")
+            return render_template("special_guest.html", messages=messages)
+        except Exception as e:
+            app.logger.error(f"Error: {e}")
+            return "Internal Server Error", 500
+    app.logger.info("Get reminders message...")
+    return render_template("special_guest.html", messages=messages)
+
+
 # Define a route for the about page
 @app.route("/about")
 def about():
@@ -364,7 +450,7 @@ def favicon():
     )
 
 
-if __name__ == "__app__":
+if __name__ == "__main__":
     app.run(debug=True)
 
 # flask --app app run --debug
