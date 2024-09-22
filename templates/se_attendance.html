@@ -1,0 +1,33 @@
+{% extends "base.html" %} {% block title %}FUSE Attendees{% endblock %} {% block
+content %}
+<h1 class="title">Select FUSE Attendees</h1>
+<form action="{{ url_for('submit_names') }}" method="post">
+  {% for letter, names in sorted_names.items() %}
+  <h2
+    class="is-size-4 has-text-primary-00 has-text-weight-bold is-underlined has-text-left-desktop pb-6"
+  >
+    {{ letter | upper }}
+  </h2>
+  <div class="columns is-multiline is-narrow">
+    {% for name in names %}
+    <div class="column is-one-third">
+      <div class="field is-flex is-align-items-center is-flex-direction-column">
+        <label class="checkbox is-size-5">
+          <input type="checkbox" name="names" value="{{ name }}" />
+          {{ name }}
+        </label>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <div class="control has-text-centered">
+    <button
+      class="has-background-primary-05 has-text-primary-05-invert button is-normal is-responsive"
+      type="submit"
+    >
+      Submit Selected Names
+    </button>
+  </div>
+</form>
+{% endblock %}

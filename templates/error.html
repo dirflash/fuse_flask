@@ -1,0 +1,12 @@
+{% extends "base.html" %} {% block title %}Error - FUSE Management{% endblock %}
+{% block content %}
+<div class="container">
+  <div>
+    <h1 class="title is-uppercase has-text-weight-bold">Error</h1>
+  </div>
+  <p class="mt-4">{{ message }}</p>
+  <a href="{{ url_for('home') }}" class="button is-primary has-text-link"
+    >Return to Home</a
+  >
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %} {% block title %}Selected Names{% endblock %} {% block
+content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">Selected Names</h1>
+    <div class="columns is-multiline is-variable is-1">
+      {% for name in selected_names %}
+      <div class="column is-half">{{ name }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

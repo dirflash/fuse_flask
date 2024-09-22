@@ -20,47 +20,34 @@
         font-size: 1em;
         width: 100%;
         height: 100px; /* Adjust the height as needed */
-        margin-bottom: 20px;
+        margin-bottom: 0px;
         height: 300px;
       }
       h3 {
+        margin-top: 0;
         text-align: left; /* Ensure left alignment */
         font-weight: bold; /* Ensure bold text */
+        margin-top: 0; /* Remove space before the h3 tag */
+      }
+      .status {
+        color: red; /* Make the text red */
       }
     </style>
   </head>
   <body>
-    <h1>Modify Messages</h1>
+    <h1 style="font-size: 40px; margin-bottom: 20px">Modify Template Message</h1>
     <div class="message-container">
-      <h3>Accepted Message</h3>
-      <textarea id="message1" placeholder="Enter a new message">
-{{ messages.accepted }}</textarea
-      >
-    </div>
-    <div class="message-container">
-      <h3>Tentative Message</h3>
-      <textarea id="message2" placeholder="Enter a new message">
-{{ messages.tentative }}</textarea
-      >
-    </div>
-    <div class="message-container">
-      <h3>No Response Message</h3>
-      <textarea id="message3" placeholder="Enter a new message">
-{{ messages.noresponse }}</textarea
-      >
-    </div>
+      <textarea id="message1" placeholder="Enter a new message">{{ messages.accepted }}
+      </textarea>
+    <h3>Do not modify the <span class="status">&lt;&lt;STATUS&gt;&gt;</span> tag in the sample template.</h3>
     <button onclick="modifyMessages()">Submit</button>
 
     <script>
       function modifyMessages() {
         let newMessage1 = document.getElementById("message1").value;
-        let newMessage2 = document.getElementById("message2").value;
-        let newMessage3 = document.getElementById("message3").value;
 
         let messages = {
           message1: newMessage1,
-          message2: newMessage2,
-          message3: newMessage3,
         };
 
         sendMessagesToFlask(messages);

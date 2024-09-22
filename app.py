@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from collections import OrderedDict
 from datetime import date, datetime
 from functools import wraps
 from logging.handlers import RotatingFileHandler
@@ -35,7 +36,8 @@ app = Flask(__name__)
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 app.config['SESSION_FILE_DIR'] = 'flask_session'
-app.config['SESSION_FILE_THRESHOLD'] = 500
+app.config["SESSION_FILE_THRESHOLD"] = 500
+app.secret_key = pref.FLASK_SECRET_KEY
 Session(app)
 
 # Set up logging
@@ -73,6 +75,9 @@ Mongo_Connection_URI: MongoClient = MongoClient(
     serverSelectionTimeoutMS=500,
 )
 
+# List of admin users
+admin_users = ["admin"]
+
 
 def allowed_file(filename):
     """Defines allowed file extensions to be uploaded"""
@@ -81,7 +86,7 @@ def allowed_file(filename):
 
 def sample_accepted_message(next_date):
     current_message = (
-        f"Your current Outlook status for the upcoming FUSE session on {next_date} is ACCEPTED. "
+        f"Your current Outlook status for the upcoming FUSE session on {next_date} is <<STATUS>>. "
         f"\n\nTHANK YOU for participating and contributing to strengthening the best group of SAs at Cisco. "
         f"\n\nWe are excited to welcome a special guest, XXXXXXXXX. "
         f"\n\nYou will be assigned a FUSE partner, so please get in touch with that person "
@@ -92,30 +97,74 @@ def sample_accepted_message(next_date):
     return current_message
 
 
-def sample_tentative_message(next_date):
-    current_message = (
-        f"Your current Outlook status for the upcoming FUSE session on {next_date} is TENTATIVE. "
-        f"\n\nTHANK YOU for participating and contributing to strengthening the best group of SAs at Cisco. "
-        f"\n\nWe are excited to welcome a special guest, XXXXXXXXX. "
-        f"\n\nYou will be assigned a FUSE partner, so please get in touch with that person "
-        f"once you have been assigned during the session. "
-        f"\n\nIf your plans change, please send an ACCEPT or DECLINE to the Outlook invite "
-        f"as soon as possible so that the pairings can be adjusted for the day."
-    )
-    return current_message
+def se_present(Mongo_Connect_URI, fuse_date):
+    attendees = Mongo_Connect_URI[pref.MONGODB]["cwa_prematch"].find_one(
+        {"date": fuse_date}, {"_id": 0}
+    )  # type: ignore
+    if attendees:
+        se_list = sorted(
+            set(
+                attendees["accepted"]
+                + attendees["no_response"]
+                + attendees["tentative"]
+            )
+        )
+        # convert se_list to a set
+        se_set = set(se_list)
+    else:
+        se_set = set()
+    return se_set
 
 
-def sample_noresponse_message(next_date):
-    current_message = (
-        f"Your current Outlook status for the upcoming FUSE session on {next_date} is NO RESPONSE. "
-        f"\n\nTHANK YOU for participating and contributing to strengthening the best group of SAs at Cisco. "
-        f"\n\nWe are excited to welcome a special guest, XXXXXXXXX. "
-        f"\n\nYou will be assigned a FUSE partner, so please get in touch with that person "
-        f"once you have been assigned during the session. "
-        f"\n\nIf your plans change, please send an ACCEPT or DECLINE to the Outlook invite "
-        f"as soon as possible so that the pairings can be adjusted for the day."
-    )
-    return current_message
+def mongo_attendance(Mongo_Connect_URI, fuse_date, names_list):
+    attendance_collection = Mongo_Connect_URI[pref.MONGODB]["cwa_attendance"]
+    attendance = attendance_collection.find_one(
+        {"date": fuse_date}, {"_id": 0}
+    )  # type: ignore
+    if attendance:
+        logging.info("Found existing attendance record")
+        # Delete existing documents in names_list
+        attendance_collection.delete_many({"date": fuse_date})
+
+        # Update with the new names_list
+        names_list = sorted(set(names_list))
+        attendance_collection.insert_one({"date": fuse_date, "attended": names_list})
+    else:
+        logging.info("No existing attendance record found")
+        # Add date record
+        attendance_collection.insert_one({"date": fuse_date, "attended": names_list})
+    # Count the number of records in the collection for the specific fuse_date
+    total_records = attendance_collection.count_documents({"date": fuse_date})
+    logging.info(f"Total records for {fuse_date}: {total_records}")
+    return total_records
+
+
+# Function to process letter list
+def letter_list(first_letter_sets):
+    sorted_list = {
+        letter: sorted(list(names)) for letter, names in first_letter_sets.items()
+    }
+    return sorted_list
+
+
+def attendee_dict(se_set):
+    # Initialize an empty dictionary
+    first_letter_dict = {}
+
+    # Iterate over each name in the set
+    for name in se_set:
+        # Get the first letter of the name
+        first_letter = name[
+            0
+        ].lower()  # Use .lower() to handle case insensitivity if needed
+
+        # If the first letter is not already a key in the dictionary, add it with an empty set
+        if first_letter not in first_letter_dict:
+            first_letter_dict[first_letter] = set()
+
+        # Add the name to the set corresponding to the first letter
+        first_letter_dict[first_letter].add(name)
+    return first_letter_dict
 
 
 def login_required(f):
@@ -131,12 +180,40 @@ def login_required(f):
     return wrap
 
 
+def is_valid_fuse_date(fuse_date):
+    """
+    Check if the provided Fuse date is valid.
+    """
+    if fuse_date is None:
+        app.logger.info("Fuse date not set")
+        flash("Fuse date needs to be set.")
+        return False
+    try:
+        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+    except ValueError:
+        app.logger.error(f"Invalid date format: {fuse_date}")
+        flash("Invalid date format.")
+        return False
+    if fuse_date_obj < date.today():
+        app.logger.info("Fuse date expired")
+        flash("Fuse date needs to be set.")
+        return False
+    return True
+
+
 # Define a route for the default page
 @app.route("/")
 def default():
     app.logger.info("Default page route...")
     username = session.get("username")
     app.logger.info(f"Username: {username}")
+    return redirect(url_for("home"))
+
+
+@app.route("/set_mode", methods=["POST"])
+def set_mode():
+    if "username" in session and session["username"] in admin_users:
+        session["mode"] = request.form["mode"]
     return redirect(url_for("home"))
 
 
@@ -176,6 +253,7 @@ def logout():
 @app.route("/home")
 # @login_required
 def home():
+    logging.info(f"Session cookie: {str(session)}")
     current_date = datetime.now().date()
     username = session.get("username")
     # if username not 'None', log username
@@ -205,7 +283,11 @@ def home():
         app.logger.info("No username found in session")
         fuse_date_obj = None
     return render_template(
-        "home.html", fuse_date=fuse_date_obj, current_date=current_date, username=username
+        "home.html",
+        fuse_date=fuse_date_obj,
+        current_date=current_date,
+        username=username,
+        admin_users=admin_users,
     )
 
 
@@ -262,7 +344,10 @@ def set_fuse_date():
                 app.logger.info(f"Current date: {current_date}")
 
     return render_template(
-        "set_fuse_date.html", fuse_date=fuse_date_obj, current_date=current_date
+        "set_fuse_date.html",
+        fuse_date=fuse_date_obj,
+        current_date=current_date,
+        admin_users=admin_users,
     )
 
 
@@ -325,7 +410,10 @@ def upload_file():
             file_size=file_size,
             upload_time=upload_time,))
         return make_response(response)
-    return render_template("upload.html")
+    return render_template(
+        "upload.html",
+        admin_users=admin_users,
+    )
 
 
 # Define a route to process the uploaded CSV file
@@ -343,8 +431,12 @@ def process_csv():
     ).process()
     return render_template(
         "process_csv.html",
-        filename=filename, accept=accept, decline=decline,
-        tentative=tentative, no_response=no_response
+        filename=filename,
+        accept=accept,
+        decline=decline,
+        tentative=tentative,
+        no_response=no_response,
+        admin_users=admin_users,
     )
 
 
@@ -352,57 +444,58 @@ def process_csv():
 @app.route("/send_reminders", methods=["GET", "POST"])
 @login_required
 def send_reminders():
+    """
+    Route to send reminders based on the Fuse date.
+    """
     app.logger.info("Send reminders route...")
 
     # Check for valid Fuse date
-    # TODO: Convert this to a function
     app.logger.info("Checking for valid Fuse date...")
     fuse_date = session.get("X-FuseDate")
-    fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
-    if fuse_date is None:
-        app.logger.info("Fuse date not set")
-        flash("Fuse date needs to be set.")
-        return redirect(url_for("set_fuse_date"))
-    try:
-        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
-    except ValueError:
-        app.logger.error(f"Invalid date format: {fuse_date}")
-        flash("Invalid date format.")
-        return redirect(url_for("set_fuse_date"))
-    if fuse_date_obj < date.today():
-        app.logger.info("Fuse date expired")
-        flash("Fuse date needs to be set.")
+    if not is_valid_fuse_date(fuse_date):
         return redirect(url_for("set_fuse_date"))
 
     # Send reminders
     app.logger.info("Sending reminders...")
+    reminders_result = Reminders(fuse_date, Mongo_Connection_URI).send_reminders()
+    if reminders_result is None:
+        app.logger.error("Failed to send reminders")
+        return render_template("error.html", message="Failed to send reminders.")
+
     (
-        record_found, remind_accepted, remind_declined,
-        remind_tentative, remind_no_response
-    ) = Reminders(
-        fuse_date, Mongo_Connection_URI
-    ).send_reminders()
-    if record_found is True:
+        record_found,
+        remind_accepted,
+        remind_declined,
+        remind_tentative,
+        remind_no_response,
+    ) = reminders_result
+    if record_found:
         app.logger.info("Record found")
         total_count = sum(
-            len(remind) for remind in [
-                remind_accepted, remind_declined, remind_tentative, remind_no_response
+            len(remind)
+            for remind in [
+                remind_accepted,
+                remind_declined,
+                remind_tentative,
+                remind_no_response,
             ]
         )
         return render_template(
             "send_reminders.html",
-            found=record_found, accept=len(remind_accepted), decline=len(remind_declined),
-            tentative=len(remind_tentative), no_response=len(remind_no_response), total=total_count
+            found=record_found,
+            accept=len(remind_accepted),
+            decline=len(remind_declined),
+            tentative=len(remind_tentative),
+            no_response=len(remind_no_response),
+            total=total_count,
+            admin_users=admin_users,
         )
-    total_count = 0
-    # TODO: Create an error page for this case
-    # pylint: disable=pointless-string-statement
-    '''return render_template(
-        "send_reminders.html",
-        found=record_found, accept=len(remind_accepted), decline=len(remind_declined),
-        tentative=len(remind_tentative), no_response=len(remind_no_response), total=total_count
-    )'''
-    # pylint: enable=pointless-string-statement
+    app.logger.info("No records found")
+    return render_template(
+        "error.html",
+        message="No records found.",
+        admin_users=admin_users,
+    )
 
 
 # Define a route to special guest
@@ -411,12 +504,8 @@ def send_reminders():
 def special_guest():
     fuse_date = session.get("X-FuseDate")
     accepted_message = sample_accepted_message(fuse_date)
-    tentative_message = sample_tentative_message(fuse_date)
-    noresponse_message = sample_noresponse_message(fuse_date)
     messages = {
         "accepted": accepted_message,
-        "tentative": tentative_message,
-        "noresponse": noresponse_message,
     }
     if request.method == "POST":
         app.logger.info("Set reminders message...")
@@ -431,14 +520,63 @@ def special_guest():
             app.logger.error(f"Error: {e}")
             return "Internal Server Error", 500
     app.logger.info("Get reminders message...")
-    return render_template("special_guest.html", messages=messages)
+    return render_template(
+        "special_guest.html",
+        messages=messages,
+        admin_users=admin_users,
+    )
+
+
+# Define a route to SE attendance
+@app.route("/se_attendance", methods=["GET", "POST"])
+@login_required
+def se_attendance():
+    fuse_date = session.get("X-FuseDate")
+    # Get the list of names from the database
+    se_set = se_present(Mongo_Connection_URI, fuse_date)
+    attendees = attendee_dict(se_set)
+    se_dict = letter_list(attendees)
+
+    # Sort se_dict by keys in alphabetical order
+    sorted_dict = OrderedDict()
+    for key in sorted(se_dict):
+        sorted_dict[key] = sorted(se_dict[key])
+
+    return render_template(
+        "se_attendance.html",
+        sorted_names=sorted_dict,
+        admin_users=admin_users,
+    )
+
+
+@app.route("/submit_names", methods=["POST"])
+def submit_names():
+    fuse_date = session.get("X-FuseDate")
+    selected_names = request.form.getlist("names")
+    logging.info(f"Selected names: {selected_names}")
+    # Update the database with the selected names in cwa_attendance
+    attendance = mongo_attendance(Mongo_Connection_URI, fuse_date, selected_names)
+    if attendance > 0:
+        flash("Attendance updated successfully")
+        logging.info("Attendance updated successfully")
+    else:
+        flash("No names selected")
+        logging.info("No names selected")
+    return render_template(
+        "selected_names.html",
+        selected_names=selected_names,
+        admin_users=admin_users,
+    )
 
 
 # Define a route for the about page
 @app.route("/about")
 def about():
     app.logger.info("About page route...")
-    return render_template("about.html")
+    return render_template(
+        "about.html",
+        admin_users=admin_users,
+    )
 
 
 @app.route("/favicon.ico")
