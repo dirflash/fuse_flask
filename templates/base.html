@@ -1,164 +1,180 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{% block title %}FUSE Management{% endblock %}</title>
-    <link
-      rel="shortcut icon"
-      href="{{ url_for('static', filename='images/favicon.ico') }}"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css"
-    />
-    <style>
-      .columns {
-        display: flex;
-        flex-wrap: wrap;
-      }
-      .column {
-        flex: 1;
-        min-width: 200px;
-      }
-      .expired {
-        color: red;
-      }
-      .table-container {
-        height: 400px;
-        overflow: auto; /* Enable scrolling */
-        margin-left: auto;
-        width: 800px; /* Adjust the width as needed */
-      }
-      .form-container {
-        margin-top: 20px;
-      }
-      .underline-link {
-        text-decoration: underline;
-      }
-      .is-underlined {
-        text-decoration: underline;
-      }
-      .footer .content p {
-        margin-bottom: 0; /* Remove bottom margin from paragraphs */
-      }
-      .background-match {background-match}
-      table {
-        width: 25%;
-        margin: 0 auto;
-        border-collapse: collapse;
-      }
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}FUSE Management{% endblock %}</title>
+  <link
+    rel="shortcut icon"
+    href="{{ url_for('static', filename='images/favicon.ico') }}"
+  />
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css"
+  />
+  <style>
+    .columns {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .column {
+      flex: 1;
+      min-width: 200px;
+    }
+    .expired {
+      color: red;
+    }
+    .table-container {
+      height: 400px;
+      overflow: auto; /* Enable scrolling */
+      margin-left: auto;
+      width: 800px; /* Adjust the width as needed */
+    }
+    .form-container {
+      margin-top: 20px;
+    }
+    .underline-link {
+      text-decoration: underline;
+    }
+    .is-underlined {
+      text-decoration: underline;
+    }
+    .footer .content p {
+      margin-bottom: 0; /* Remove bottom margin from paragraphs */
+    }
+    .background-match {background-match}
+    table {
+      width: 25%;
+      margin: 0 auto;
+      border-collapse: collapse;
+    }
 
-      table,
-      th,
-      td {
-        border: 1px solid black;
-      }
+    table,
+    th,
+    td {
+      border: 1px solid black;
+    }
 
-      th,
-      td {
-        padding: 8px;
-        text-align: left;
-      }
+    th,
+    td {
+      padding: 8px;
+      text-align: left;
+    }
 
-      thead {
-        background-color: inherit;
-      }
-      .button.is-success.is-large.has-background-primary-05 {
-        background-color: #3273dc;
-        border-color: #3273dc;
-        color: #fff;
-      }
-      .button.is-success.is-large.has-background-primary-05:hover {
-        background-color: #276cda;
-        border-color: #276cda;
-      }
-      .footer-content {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-    </style>
-    <script src="https://kit.fontawesome.com/217e1ce6aa.js" crossorigin="anonymouns"></script>
-  </head>
+    thead {
+      background-color: inherit;
+    }
+    .button.is-success.is-large.has-background-primary-05 {
+      background-color: #3273dc;
+      border-color: #3273dc;
+      color: #fff;
+    }
+    .button.is-success.is-large.has-background-primary-05:hover {
+      background-color: #276cda;
+      border-color: #276cda;
+    }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+  <script src="https://kit.fontawesome.com/217e1ce6aa.js" crossorigin="anonymouns"></script>
+</head>
 
-  <body>
-    {% with messages = get_flashed_messages() %} {% if messages %} {% for
-    message in messages %}
-    <div>{{ message }}</div>
-    {% endfor %} {% endif %} {% endwith %}
-    <section class="hero is-primary is-fullheight">
-      <div class="hero-head">
-        <nav class="navbar">
-          <div class="container">
-            <div id="navbarMenuHeroA" class="navbar-menu">
-              <div class="navbar-end">
-                <a href="{{ url_for('home') }}" class="navbar-item"> Home </a>
-                <a href="{{ url_for('login') }}" class="navbar-item"> Login </a>
-                <a href="{{ url_for('set_fuse_date') }}" class="navbar-item">
-                  Set Fuse Date
-                </a>
-                <a href="{{ url_for('upload_file') }}" class="navbar-item">
-                  Upload File
-                </a>
-                <a href="{{ url_for('process_csv') }}" class="navbar-item">
-                  Process CSV File
-                </a>
-                <a href="{{ url_for('special_guest') }}" class="navbar-item">
-                  Reminder Message
-                </a>
-                <a href="{{ url_for('send_reminders') }}" class="navbar-item">
-                  Send Reminders
-                </a>
-                <a href="{{ url_for('se_attendance') }}" class="navbar-item">
-                  SE Attendance
-                </a>
-                <a href="{{ url_for('logout') }}" class="navbar-item">
-                  Logout
-                </a>
-                <a href="{{ url_for('about') }}" class="navbar-item"> About </a>
-              </div>
-            </div>
-          </div>
-        </nav>
+<body>
+
+  <!-- Flash Messages-->
+  {% with messages = get_flashed_messages() %} {% if messages %} {% for
+  message in messages %}
+  <div>{{ message }}</div>
+  {% endfor %} {% endif %} {% endwith %}
+
+  <!-- Nav Bar -->
+    <nav class="navbar is-black has-shadow">
+      <!-- logo -->
+      <div class="navbar-brand">
+        <a class="navbar-item">
+          <img src="static/images/fuse.png" style="max-height: 70px" class="py-2 px-2" />
+        </a>
+
+        <!-- hamburger menu -->
+        <a class="navbar-burger" id="burger">
+          <span></span>
+          <span></span>
+          <span></span>
+        </a>
       </div>
 
-      <div class="hero-body">
-        <div class="container has-text-centered">
-          {% block content %} {% endblock %}
+      <!-- Nav Bar Menu -->
+      <div class="navbar-menu" id="nav-links">
+        <!-- right links -->
+        <div class="navbar-end">
+          <a href="{{ url_for('home') }}" class="navbar-item">Home</a>
+          <a href="{{ url_for('login') }}" class="navbar-item">Login</a>
+          <a href="{{ url_for('set_fuse_date') }}" class="navbar-item">
+            Set Fuse Date
+          </a>
+          <a href="{{ url_for('process_csv') }}" class="navbar-item">
+            Process CSV File
+          </a>
+          <a href="{{ url_for('special_guest') }}" class="navbar-item">
+            Reminder Message
+          </a>
+          <a href="{{ url_for('send_reminders') }}" class="navbar-item">
+            Send Reminders
+          </a>
+          <a href="{{ url_for('se_attendance') }}" class="navbar-item">
+            SE Attendance
+          </a>
+          <a href="{{ url_for('logout') }}" class="navbar-item">
+            Logout
+          </a>
+          <a href="{{ url_for('about') }}" class="navbar-item"> About </a>
         </div>
       </div>
-    </section>
-  </body>
+    </nav>
 
-  <footer class="footer">
-    <div class="content footer-content">
-      <div>
-        {% if session["username"] %}
-        <p>Session Username: {{ session["username"] }}</p>
-        {% if session["X-FuseDate"] %}
-        <p>Fuse Date: {{ session["X-FuseDate"] }}</p>
-        {% else %}
-        <p>Fuse Date: Not set</p>
-        {% endif %}
-        {% else %}
-        <p>Session Username: Not set</p>
-        <p>Fuse Date: Not available</p>
-        {% endif %}
-      </div>
-      <div>
-        {% if session["username"] in admin_users %}
-        <form method="post" action="{{ url_for('set_mode') }}">
-          <div class="select">
-            <select name="mode" onchange="this.form.submit()">
-              <option value="production" {% if session["mode"] == "production" %}selected{% endif %}>Production</option>
-              <option value="debug" {% if session["mode"] == "debug" %}selected{% endif %}>Debug</option>
-            </select>
-          </div>
-        </form>
-        {% endif %}
-      </div>
+    <!-- Main Content -->
+    <div class="container has-text-centered">
+      {% block content %} {% endblock %}
     </div>
-  </footer>
+
+    <section class="section is-medium"></section>
+
+    <!-- footer -->
+    <footer class="footer mt-6">
+      <div class="content footer-content">
+        <div>
+          {% if session["username"] %}
+          <p>Session Username: {{ session["username"] }}</p>
+          {% if session["X-FuseDate"] %}
+          <p>Fuse Date: {{ session["X-FuseDate"] }}</p>
+          {% else %}
+          <p>Fuse Date: Not set</p>
+          {% endif %}
+          {% else %}
+          <p>Session Username: Not set</p>
+          <p>Fuse Date: Not available</p>
+          {% endif %}
+        </div>
+        <div>
+          {% if session["username"] in admin_users %}
+          <form method="post" action="{{ url_for('set_mode') }}">
+            <div class="select">
+              <select name="mode" onchange="this.form.submit()">
+                <option value="production" {% if session["mode"] == "production" %}selected{% endif %}>Production</option>
+                <option value="debug" {% if session["mode"] == "debug" %}selected{% endif %}>Debug</option>
+              </select>
+            </div>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </footer>
+
+  <script src="../static/script.js"></script>
+
+</body>
 </html>

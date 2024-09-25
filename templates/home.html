@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <h1>Welcome to FUSE Management!</h1>
+  <h1 class="is-size-3-mobile is-size-1-desktop title">FUSE Management!</h1>
   {% with messages = get_flashed_messages() %} 
   {% endwith %}
   
   {% if session.username and session.username != "Not Set" %}
     {% if fuse_date == "Not set" %}
-    <p>Current Fuse Date: Not set</p>
+    <p class="is-size-6-mobile is-size-4-desktop mb-5">Current Fuse Date: Not set</p>
     {% else %}
-    <p>
+    <p class="is-size-6-mobile is-size-4-desktop mb-5">
       Current Fuse Date:
       <span class="{% if fuse_date < current_date %} expired {% endif %}">
         {{ fuse_date }}

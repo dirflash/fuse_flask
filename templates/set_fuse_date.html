@@ -1,29 +1,52 @@
 {% extends "base.html" %} {% block content %}
-  <h1>Set Fuse Date</h1>
+  <h1 class="is-size-3-mobile is-size-1-desktop title">Set Fuse Date</h1>
   {% if error %}
   <div class="alert alert-danger">{{ error }}</div>
   {% endif %}
-  {% if fuse_date == "Not set" %}
-  <p>Fuse Date: Not set</p>
-  {% else %}
-  <p>
-    Fuse Date:
-    <span class="{% if fuse_date < current_date %} expired {% endif %}">
-      {{ fuse_date }}
-    
-  </p>
-  {% endif %}
-  <form method="post" action="{{ url_for('set_fuse_date') }}">
-    <div class="form-group">
-      <label for="new_fuse_date">New Fuse Date:</label>
-      <input
-        type="date"
-        class="form-control"
-        id="new_fuse_date"
-        name="new_fuse_date"
-        required
-      />
+
+  <section class="section">
+    <div class="container">
+      <div class="columns">
+        <div class="column">
+
+        </div>
+        <div class="column">
+          <!-- Show Fuse date -->
+          {% if fuse_date == "Not set" %}
+          <p class="is-size-6-mobile is-size-5-desktop">Fuse Date: Not set</p>
+          {% else %}
+          <p class="is-size-7-mobile is-size-5-desktop has-text-weight-semibold has-text-centered">
+            Fuse Date:
+            <span class="{% if fuse_date < current_date %} expired {% endif %}">
+              {{ fuse_date }}
+          </p>
+          {% endif %}
+
+          <!-- New Fuse Date Form -->
+          <form method="post" action="{{ url_for('set_fuse_date') }}">
+            <div class="field is-size-7-mobile is-size-5-desktop has-text-centered">
+              <label for="new_fuse_date">New Fuse Date:</label>
+              <!-- Date is not a Bulma supported input class -->
+              <input 
+                type="date"
+                class="form-control"
+                id="new_fuse_date"
+                name="new_fuse_date"
+                required 
+              />
+            </div>
+
+            <!-- Submit Button -->
+            <div class="has-text-centered is-responsive">
+              <button class="button is-primary">Submit</button>
+            </div>
+          </form>
+        </div>
+        <div class="column">
+
+        </div>
+      </div>
+
     </div>
-    <button type="submit" class="btn btn-primary">Submit</button>
-  </form>
+  </section>
 {% endblock %}

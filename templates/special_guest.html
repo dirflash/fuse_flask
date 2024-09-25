@@ -35,11 +35,18 @@
     </style>
   </head>
   <body>
-    <h1 style="font-size: 40px; margin-bottom: 20px">Modify Template Message</h1>
-    <div class="message-container">
-      <textarea id="message1" placeholder="Enter a new message">{{ messages.accepted }}
-      </textarea>
-    <h3>Do not modify the <span class="status">&lt;&lt;STATUS&gt;&gt;</span> tag in the sample template.</h3>
+    <h1 class="is-size-3-mobile is-size-1-desktop title">
+      Modify Template Message
+    </h1>
+
+    <!-- Modify message text box -->
+    <div class="field">
+      <textarea id="message1">{{ messages.accepted }}</textarea>
+    </div>
+    <p class="subtitle is-5">
+      Do not modify the <span class="status">&lt;&lt;STATUS&gt;&gt;</span> tag
+      in the sample template.
+    </p>
     <button onclick="modifyMessages()">Submit</button>
 
     <script>
