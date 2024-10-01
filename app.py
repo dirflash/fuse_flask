@@ -21,6 +21,7 @@ from flask import (
     url_for,
 )
 from pymongo import MongoClient
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 import modules.preferences.preferences as pref
@@ -37,6 +38,7 @@ app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 app.config['SESSION_FILE_DIR'] = 'flask_session'
 app.config["SESSION_FILE_THRESHOLD"] = 500
+app.config["UPLOAD_FOLDER"] = "uploads/"
 app.secret_key = pref.FLASK_SECRET_KEY
 Session(app)
 
@@ -354,65 +356,105 @@ def set_fuse_date():
 @app.route("/upload", methods=["GET", "POST"])
 @login_required
 def upload_file():
-    app.logger.info("File upload route...")
+    """
+    Handle file uploads via the /upload route.
+
+    This function supports both GET and POST methods. For GET requests, it renders the upload form.
+    For POST requests, it processes the uploaded file, checks for errors, saves the file, and
+    returns a response with the file details.
+
+    Returns:
+        Response: Rendered HTML template with appropriate messages and file details.
+    """
+
+    app.logger.info(f"File upload route with method: {request.method}")
     if request.method == "POST":
         app.logger.info("File upload post route...")
+
+        # Log the form data
+        app.logger.info(f"Form data: {request.form}")
+
+        # Log the files data
+        app.logger.info(f"Files data: {request.files}")
+
         # Check if a file was uploaded
-        if "file" not in request.files:
+        if not request.files:
+            app.logger.error("No files found in /upload request")
             return render_template("upload.html", error="No file uploaded")
 
-        file = request.files["file"]
+        # Check if any file has been uploaded
+        file_uploaded = False
+        for file_key in request.files:
+            file = request.files[file_key]
+            if file.filename != "":
+                file_uploaded = True
 
-        # Check if the file has a name
-        if file.filename == "":
-            return render_template("upload.html", error="No file selected")
+        if file_uploaded:
+            if file:
+                app.logger.info("File uploaded successfully")
 
-        # Check if the file extension is allowed
-        if not allowed_file(file.filename):
-            return render_template("upload.html", error="File type not allowed")
+            # Secure the filename
+            filename = secure_filename(file.filename)
+            app.logger.info(f"Uploaded file: {filename}")
 
-        if file.content_length > app.config["MAX_CONTENT_LENGTH"]:
-            return render_template("upload.html", error="File size exceeds the limit")
+            # Check if the uploads folder exists
+            if not os.path.exists(app.config["UPLOAD_FOLDER"]):
+                os.makedirs(app.config["UPLOAD_FOLDER"])
 
-        # Check if the uploads folder exists
-        if not os.path.exists(app.config["UPLOAD_FOLDER"]):
-            os.makedirs(app.config["UPLOAD_FOLDER"])
+            # Record the start time
+            start_time = time.time()
 
-        # If the file already exists, delete it and upload the new file
-        if os.path.exists(os.path.join(app.config["UPLOAD_FOLDER"], file.filename)):
-            os.remove(os.path.join(app.config["UPLOAD_FOLDER"], file.filename))
+            # If the file already exists, delete it and upload the new file
+            file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
-        # Record the start time
-        start_time = time.time()
+            # Save the file to the uploads folder
+            file.save(file_path)
 
-        # Save the file to the uploads folder
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(file_path)
+            # Check file size
+            file_size = os.path.getsize(file_path)
+            if file_size > app.config.get("MAX_CONTENT_LENGTH", 16 * 1024 * 1024):
+                app.logger.error(f"File size exceeds the limit: {file_size}")
+                return render_template(
+                    "upload.html", error="File size exceeds the limit"
+                )
 
-        # Read the file into a Pandas DataFrame
-        df = pd.read_csv(file_path)
+            # Read the file into a Pandas DataFrame
+            df = pd.read_csv(file_path)
 
-        # Calculate the upload time with a maximum of 4 decimal places
-        upload_time = round(time.time() - start_time, 4)
+            # Calculate the upload time with a maximum of 4 decimal places
+            upload_time = round(time.time() - start_time, 4)
 
-        # Get file metadata
-        file_size = os.path.getsize(file_path)
+            # Set filename session cookie
+            session["X-Filename"] = filename
+            app.logger.info(f"Session cookie: {session}")
 
-        # Set filename session cookie
-        session["X-Filename"] = filename
+            # Render the upload template with the file details
+            app.logger.info("Rendering upload template (line 434)...")
 
-        response = make_response(render_template(
-            "upload.html",
-            message="File uploaded successfully",
-            filename=filename,
-            data=df.to_html(index=False, classes="table table-striped"),
-            file_size=file_size,
-            upload_time=upload_time,))
-        return make_response(response)
+            return render_template(
+                "upload.html",
+                message="File uploaded successfully",
+                filename=filename,
+                data=df.to_html(index=False, classes="table table-striped"),
+                file_size=file_size,
+                upload_time=upload_time,
+            )
+
+        if not file_uploaded:
+            app.logger.error("No file found in /upload request")
+            return render_template("upload.html", error="No file uploaded")
+
+    # If the request method is GET, render the upload form
+    return render_template("upload.html")
+
+
+@app.route("/result", methods=["GET", "POST"])
+def result():
+    app.logger.info("Result route...")
     return render_template(
-        "upload.html",
-        admin_users=admin_users,
+        "result.html", error="No error", message="File uploaded successfully"
     )
 
 

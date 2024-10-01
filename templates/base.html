@@ -79,6 +79,10 @@
       justify-content: space-between;
       align-items: center;
     }
+    .full-height-column {
+      height: 100%;
+      overflow: hidden;
+    }
   </style>
   <script src="https://kit.fontawesome.com/217e1ce6aa.js" crossorigin="anonymouns"></script>
 </head>
@@ -115,6 +119,9 @@
           <a href="{{ url_for('login') }}" class="navbar-item">Login</a>
           <a href="{{ url_for('set_fuse_date') }}" class="navbar-item">
             Set Fuse Date
+          </a>
+          <a href="{{ url_for('upload_file') }}" class="navbar-item">
+            Upload CSV File
           </a>
           <a href="{{ url_for('process_csv') }}" class="navbar-item">
             Process CSV File
