@@ -1,0 +1,34 @@
+{% extends "base.html" %} {% block title %}SE Match{% endblock %} {% block
+content %}
+<h1 class="is-size-3-mobile is-size-1-desktop title">SE Match</h1>
+
+<form action="{{ url_for('match') }}" method="post">
+  {% for letter, names in sorted_names.items() %}
+  <h2
+    class="is-size-4 has-text-primary-00 has-text-weight-bold is-underlined has-text-left-desktop pb-6"
+  >
+    {{ letter | upper }}
+  </h2>
+  <div class="columns is-multiline is-narrow">
+    {% for name in names %}
+    <div class="column is-one-third">
+      <div class="field is-flex is-align-items-center is-flex-direction-column">
+        <span class="is-size-5">{{ name }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <div class="has-text-centered">
+    <p class="is-size-5 has-text-weight-bold">Total Names: {{ total_names }}</p>
+  </div>
+  <div class="control has-text-centered">
+    <button
+      class="has-background-primary-05 has-text-primary-05-invert button is-normal is-responsive"
+      type="submit"
+    >
+      Match SEs
+    </button>
+  </div>
+</form>
+{% endblock %}

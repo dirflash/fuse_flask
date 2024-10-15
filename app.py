@@ -462,6 +462,27 @@ def result():
 @app.route("/process_csv", methods=["GET", "POST"])
 @login_required
 def process_csv():
+    """
+    Handles the /process_csv route.
+
+    This route processes the uploaded CSV file. It supports both GET and POST methods.
+    - On GET request: Renders the process_csv.html template with the filename set to
+                      "None" if no file is found in the session.
+    - On POST request: Processes the CSV file by executing the ProcessAttachment module
+                       which updates Mongo with the status of each person. Then, it renders
+                       the process_csv.html template with the results of the processing.
+                       No Webex messages are sent in this route.
+
+    Returns:
+        Response: A Flask Response object that renders the process_csv.html template with
+                  the following context variables:
+            - filename (str): The name of the uploaded file.
+            - accept (int): The number of accepted entries.
+            - decline (int): The number of declined entries.
+            - tentative (int): The number of tentative entries.
+            - no_response (int): The number of entries with no response.
+            - admin_users (list): A list of admin users.
+    """
     app.logger.info("Process CSV file route...")
     filename = session.get("X-Filename")
     fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
@@ -611,6 +632,33 @@ def submit_names():
     )
 
 
+@app.route("/match", methods=["GET", "POST"])
+@login_required
+def match():
+    app.logger.info(f"SE match route with method: {request.method}")
+    if request.method == "POST":
+        app.logger.info("SE match post route...")
+        return render_template("post_match.html")
+    app.logger.info("SE match get route...")
+    fuse_date = session.get("X-FuseDate")
+    # Get the list of names from the database
+    se_set = se_present(Mongo_Connection_URI, fuse_date)
+    attendees = attendee_dict(se_set)
+    se_dict = letter_list(attendees)
+
+    # Sort se_dict by keys in alphabetical order
+    sorted_dict = OrderedDict()
+    for key in sorted(se_dict):
+        sorted_dict[key] = sorted(se_dict[key])
+
+    return render_template(
+        "match.html",
+        sorted_names=sorted_dict,
+        admin_users=admin_users,
+        total_names=len(se_set),
+    )
+
+
 # Define a route for the about page
 @app.route("/about")
 def about():
@@ -628,6 +676,38 @@ def favicon():
         "favicon.ico",
         mimetype="image/vnd.microsoft.icon",
     )
+
+
+@app.route("/robots.txt")
+def robots():
+    return send_from_directory(
+        os.path.join(app.root_path, "static"),
+        "robots.txt",
+        mimetype="text/plain",
+    )
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    return send_from_directory(
+        os.path.join(app.root_path, "static"),
+        "sitemap.xml",
+        mimetype="application/xml",
+    )
+
+
+@app.errorhandler(404)
+def page_not_found(e):
+    app.logger.error(f"{request.path} was requested and not found: {e}")
+    return render_template("404.html", error=e), 404
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    app.logger.error(f"Internal server error: {e}")
+    # Log requested path
+    app.logger.error(f"Requested path: {request.path}")
+    return render_template("500.html", error=e), 500
 
 
 if __name__ == "__main__":

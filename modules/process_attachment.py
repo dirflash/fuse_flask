@@ -128,7 +128,6 @@ class ProcessAttachment:
                 self.logger.info(f"Updated {update_result.modified_count} documents.")
 
                 # Remove any documents that are not in any of the lists
-                # WARNING: This operation will delete data from your database. Use with caution.
                 update_result = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_many(
                     {"date": self.fuse_date},
                     {

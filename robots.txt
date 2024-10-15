@@ -1,0 +1,5 @@
+User-agent: *
+
+Disallow: / # Disallow everything
+
+Sitemap: https://www.fuse-cisco.com/sitemap.xml
