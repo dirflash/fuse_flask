@@ -141,6 +141,22 @@ def mongo_attendance(Mongo_Connect_URI, fuse_date, names_list):
     return total_records
 
 
+# Function to get attendance
+def get_attendance(Mongo_Connect_URI, fuse_date):
+    attendance_collection = Mongo_Connect_URI[pref.MONGODB]["cwa_attendance"]
+    attendance = attendance_collection.find_one(
+        {"date": fuse_date}, {"_id": 0}
+    )  # type: ignore
+    if attendance:
+        logging.info("Found existing attendance record")
+        attended_list = attendance["attended"]
+        attended_set = set(attended_list)
+    else:
+        logging.info("No existing attendance record found")
+        attended_set = set()
+    return attended_set
+
+
 # Function to process letter list
 def letter_list(first_letter_sets):
     sorted_list = {
@@ -638,11 +654,14 @@ def match():
     app.logger.info(f"SE match route with method: {request.method}")
     if request.method == "POST":
         app.logger.info("SE match post route...")
-        return render_template("post_match.html")
+        mode = session.get("mode")
+        if mode == "debug":
+            flash(f"Mode: {mode}")
+        return render_template("post_match.html", admin_users=admin_users)
     app.logger.info("SE match get route...")
     fuse_date = session.get("X-FuseDate")
     # Get the list of names from the database
-    se_set = se_present(Mongo_Connection_URI, fuse_date)
+    se_set = get_attendance(Mongo_Connection_URI, fuse_date)
     attendees = attendee_dict(se_set)
     se_dict = letter_list(attendees)
 
