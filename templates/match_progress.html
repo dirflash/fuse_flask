@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SE Info</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css"
+    />
+    <style>
+      #loading-spinner {
+        display: none;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading-spinner" class="is-flex">
+      <button class="button is-loading is-large is-primary">Loading</button>
+    </div>
+    <div id="content">
+      <h1 class="is-size-3-mobile is-size-1-desktop title">
+        SE Match - In Progress
+      </h1>
+    </div>
+
+    <script>
+      function showLoadingSpinner() {
+        document.getElementById("loading-spinner").style.display = "flex";
+        document.getElementById("content").style.display = "none";
+      }
+
+      function hideLoadingSpinner() {
+        document.getElementById("loading-spinner").style.display = "none";
+        document.getElementById("content").style.display = "block";
+      }
+
+      // Example usage
+      showLoadingSpinner();
+      // Simulate a long-running operation
+      setTimeout(hideLoadingSpinner, 5000); // Hide spinner after 5 seconds
+    </script>
+  </body>
+</html>

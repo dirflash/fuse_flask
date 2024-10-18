@@ -29,6 +29,7 @@ from flask_session import Session
 from modules.fuse_date import FuseDate
 from modules.process_attachment import ProcessAttachment
 from modules.reminders import Reminders
+from modules.se_select import se_select
 
 # pylint: disable=logging-fstring-interpolation
 
@@ -124,7 +125,7 @@ def mongo_attendance(Mongo_Connect_URI, fuse_date, names_list):
         {"date": fuse_date}, {"_id": 0}
     )  # type: ignore
     if attendance:
-        logging.info("Found existing attendance record")
+        app.logger.info("Found existing attendance record")
         # Delete existing documents in names_list
         attendance_collection.delete_many({"date": fuse_date})
 
@@ -132,12 +133,12 @@ def mongo_attendance(Mongo_Connect_URI, fuse_date, names_list):
         names_list = sorted(set(names_list))
         attendance_collection.insert_one({"date": fuse_date, "attended": names_list})
     else:
-        logging.info("No existing attendance record found")
+        app.logger.info("No existing attendance record found")
         # Add date record
         attendance_collection.insert_one({"date": fuse_date, "attended": names_list})
     # Count the number of records in the collection for the specific fuse_date
     total_records = attendance_collection.count_documents({"date": fuse_date})
-    logging.info(f"Total records for {fuse_date}: {total_records}")
+    app.logger.info(f"Total records for {fuse_date}: {total_records}")
     return total_records
 
 
@@ -148,11 +149,11 @@ def get_attendance(Mongo_Connect_URI, fuse_date):
         {"date": fuse_date}, {"_id": 0}
     )  # type: ignore
     if attendance:
-        logging.info("Found existing attendance record")
+        app.logger.info("Found existing attendance record")
         attended_list = attendance["attended"]
         attended_set = set(attended_list)
     else:
-        logging.info("No existing attendance record found")
+        app.logger.info("No existing attendance record found")
         attended_set = set()
     return attended_set
 
@@ -652,14 +653,33 @@ def submit_names():
 @login_required
 def match():
     app.logger.info(f"SE match route with method: {request.method}")
+    fuse_date = session.get("X-FuseDate")
+    test_mode = session.get("mode")
+    if fuse_date is None:
+        app.logger.error("Fuse date not found in session")
     if request.method == "POST":
         app.logger.info("SE match post route...")
+        # Match attending SEs
+        fuse_date = session.get("X-FuseDate")
+        #
+        #
+        #
+        se_set = get_attendance(Mongo_Connection_URI, fuse_date)
+        status = se_select(fuse_date, Mongo_Connection_URI, se_set)
+        app.logger.info(f"SE match status: {status}")
+        #
+        #
+        #
         mode = session.get("mode")
         if mode == "debug":
             flash(f"Mode: {mode}")
-        return render_template("post_match.html", admin_users=admin_users)
+        return render_template(
+            "post_match.html",
+            admin_users=admin_users,
+            fuse_date=fuse_date,
+            test_mode=test_mode,
+        )
     app.logger.info("SE match get route...")
-    fuse_date = session.get("X-FuseDate")
     # Get the list of names from the database
     se_set = get_attendance(Mongo_Connection_URI, fuse_date)
     attendees = attendee_dict(se_set)
@@ -672,9 +692,11 @@ def match():
 
     return render_template(
         "match.html",
+        fuse_date=fuse_date,
         sorted_names=sorted_dict,
         admin_users=admin_users,
         total_names=len(se_set),
+        test_mode=test_mode,
     )
 
 
@@ -727,6 +749,11 @@ def internal_server_error(e):
     # Log requested path
     app.logger.error(f"Requested path: {request.path}")
     return render_template("500.html", error=e), 500
+
+
+@app.route("/match_progress", methods=["GET"])
+def match_progress():
+    return render_template("match_progress.html", admin_users=admin_users)
 
 
 if __name__ == "__main__":

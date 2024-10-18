@@ -2,4 +2,20 @@
 content %}
 <h1 class="is-size-3-mobile is-size-1-desktop title">SE Match - Post</h1>
 
-{% endblock %}
+{% if fuse_date == None %}
+<article class="message">
+  <div class="message-header">
+    <p>Fuse Date not set</p>
+    <button class="delete" aria-label="delete"></button>
+  </div>
+  <div class="message-body">
+    The Fuse date has expired or is not set.
+    <a href="{{ url_for('set_fuse_date') }}">Click here</a> to set a new Fuse
+    date.
+  </div>
+</article>
+
+<p class="is-size-5">No Fuse Date Set</p>
+{% else %}
+<p class="is-size-5">Fuse Date: {{ fuse_date }}</p>
+{% endif %} {% endblock %}
