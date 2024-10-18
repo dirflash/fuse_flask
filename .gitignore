@@ -7,7 +7,7 @@ __pycache__
 /flask_session/*
 /logs/*
 /logging/*
-/match_files/*
+/match_files/*.csv
 /uploads/*
 .mypy_cache/*
 modules/preferences/preferences.py
