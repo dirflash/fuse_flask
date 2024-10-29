@@ -187,7 +187,7 @@ def sorted_running_count_func(se_dict) -> Dict[int, int]:
                 logger.error(f"SEs: {se_dict[r][1]}")
                 logger.error(f"se_dict: {se_dict}")
                 logger.error(f"SE: {x}")
-                sys.exit(1)
+                sys.exit(1)  # TODO: Handle this error more gracefully
     # sort running_count by key
     sorted_running_count: Dict[int, int] = dict(
         sorted(running_count.items(), key=lambda x: x[0])
@@ -234,7 +234,7 @@ def cleanup_se(
         logger.error(f"Region: {region}")
         logger.error(f"SEs: {se_dict[region][1]}")
         logger.error(f"se_dict: {se_dict}")
-        sys.exit(1)
+        sys.exit(1)  # TODO: Handle this error more gracefully
     # Remove se1 from SEs
     # Verify that se is not in se_dict
     if se in se_dict[region][1]:
@@ -371,7 +371,7 @@ def update_cwa_matches(se, other_value, assignment_date, max_retries=5):
 def write_matches_to_file(matches_filename, se_pair_list):
     """Write matches to file"""
     logger.info(f"Writing matches to {matches_filename}")
-    matches_file = open(f".\\match_files\\{matches_filename}", "w")
+    matches_file = open(f".\\match_files\\{matches_filename}", "w", encoding="utf-8")
     matches_file.write("SE1_NAME,SE1_CCO,SE2_CCO,SE2_NAME\n")
     # Pre-fetch all SE info in a single query and create a dictionary for quick lookup.
     se_ids = {se for pair in se_pair_list for se in pair}
@@ -926,7 +926,7 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
             # Reset and start over
             if kobayashi_counter == 5:
                 logger.warning("Kobayashi Maru scenario encountered 5 times. Exiting.")
-                sys.exit(1)
+                return 500
             se_pair_list = []
             # SEs is a set of SEs to be tracked
             SEs, full_SEs, se_assignment_count, percentile, top_ses = (
@@ -970,7 +970,7 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                     except Exception as e:
                         logger.error(f"Error updating {x} to cwa_matches collection.")
                         logger.error(e)
-                        sys.exit(1)
+                        return 500
 
                 for _ in range(5):
                     try:
@@ -984,7 +984,7 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                     except Exception as e:
                         logger.error(f"Error adding {y} to cwa_matches collection.")
                         logger.error(e)
-                        sys.exit(1)
+                        return 500
 
                 # Update SE x
                 if update_cwa_matches(x, y, assignment_date):
@@ -1018,9 +1018,12 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
         except Exception as e:
             logger.error("Error writing matches to file.")
             logger.error(e)
-            sys.exit(1)
+            return 500
 
     end_time = perf_counter()
     logger.info(f"Total time to complete: {end_time - start_time:.6f} seconds.")
 
-    return "** success **"
+    if test_mode is False:
+        return matches_filename
+    else:
+        return NA

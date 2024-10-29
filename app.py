@@ -16,6 +16,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     send_from_directory,
     session,
     url_for,
@@ -612,6 +613,7 @@ def special_guest():
 @login_required
 def se_attendance():
     fuse_date = session.get("X-FuseDate")
+    file_name = session.get("X-Filename")
     # Get the list of names from the database
     se_set = se_present(Mongo_Connection_URI, fuse_date)
     attendees = attendee_dict(se_set)
@@ -626,6 +628,7 @@ def se_attendance():
         "se_attendance.html",
         sorted_names=sorted_dict,
         admin_users=admin_users,
+        file_name=file_name,
     )
 
 
@@ -654,19 +657,26 @@ def submit_names():
 def match():
     app.logger.info(f"SE match route with method: {request.method}")
     fuse_date = session.get("X-FuseDate")
-    test_mode = session.get("mode")
+    mode = session.get("mode")
     if fuse_date is None:
         app.logger.error("Fuse date not found in session")
     if request.method == "POST":
+        match_file = "NA"
         app.logger.info("SE match post route...")
         # Match attending SEs
-        fuse_date = session.get("X-FuseDate")
-        #
-        #
-        #
         se_set = get_attendance(Mongo_Connection_URI, fuse_date)
-        status = se_select(fuse_date, Mongo_Connection_URI, se_set)
-        app.logger.info(f"SE match status: {status}")
+        # SE matching process. Returns the file name of the match file
+        status = se_select(fuse_date, Mongo_Connection_URI, se_set, mode)
+        if status == "NA":
+            app.logger.warning("No SEs match file created.")
+        # check if status is a 3 digit http error code
+        elif status == "500":
+            # return errorhandler
+            app.logger.error(f"Internal Server Error: {status}")
+            return render_template("500.html", error=status), int(status)
+        else:
+            app.logger.info(f"SE match file ({status}) created.")
+            match_file = status
         #
         #
         #
@@ -677,7 +687,8 @@ def match():
             "post_match.html",
             admin_users=admin_users,
             fuse_date=fuse_date,
-            test_mode=test_mode,
+            test_mode=mode,
+            match_file=match_file,
         )
     app.logger.info("SE match get route...")
     # Get the list of names from the database
@@ -696,8 +707,17 @@ def match():
         sorted_names=sorted_dict,
         admin_users=admin_users,
         total_names=len(se_set),
-        test_mode=test_mode,
+        test_mode=mode,
     )
+
+
+@app.route("/update-mode", methods=["POST"])
+def update_mode():
+    data = request.get_json()
+    if "mode" in data:
+        session["mode"] = data["mode"]
+        return jsonify({"success": True}), 200
+    return jsonify({"error": "Invalid request"}), 400
 
 
 # Define a route for the about page

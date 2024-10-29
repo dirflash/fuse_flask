@@ -170,16 +170,23 @@
           {% else %}
           <p>Fuse Date: Not set</p>
           {% endif %}
+          {% if session["X-Filename"] %}
+          <p>File Name: {{ session["X-Filename"] }}</p>
+          {% endif %}
+          {% if match_file != "NA" %}
+          <p>Match File: {{ match_file }}</p>
+          {% endif %}
           {% else %}
           <p>Session Username: Not set</p>
           <p>Fuse Date: Not available</p>
+          <p>File Name: Not available</p>
           {% endif %}
         </div>
         <div>
           {% if session["username"] in admin_users %}
           <form method="post" action="{{ url_for('set_mode') }}">
             <div class="select">
-              <select name="mode" onchange="this.form.submit()">
+              <select name="mode" id="mode-select">
                 <option value="production" {% if session["mode"] == "production" %}selected{% endif %}>Production</option>
                 <option value="debug" {% if session["mode"] == "debug" %}selected{% endif %}>Debug</option>
               </select>
