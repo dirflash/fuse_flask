@@ -28,13 +28,15 @@ class ProcessAttachment:
     Class to process attachments
     """
 
-    def __init__(self, fuse_date, attachment, mongo_connect_uri):
+    def __init__(self, fuse_date, attachment, mongo_connect_uri, db, area):
         """
         Constructor
         """
         self.fuse_date = fuse_date
         self.attachment = attachment
         self.mongo_connect_uri = mongo_connect_uri
+        self.db = db
+        self.prematch = area + "_prematch"
         self.logger = logging.getLogger(__name__)
 
     def process(self):
@@ -84,13 +86,13 @@ class ProcessAttachment:
         # Does cwa_attendees record exist for this date?
         for _ in range(5):
             try:
-                if self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].find_one(
+                if self.mongo_connect_uri[self.db][self.prematch].find_one(
                     {"date": self.fuse_date}
                 ):
                     self.logger.info(f" Record for {self.fuse_date} exists in prematch table.")
                 else:
                     # Create the record
-                    self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].insert_one(
+                    self.mongo_connect_uri[self.db][self.prematch].insert_one(
                         {"date": self.fuse_date}
                     )
                     self.logger.info(f" Record for {self.fuse_date} created in prematch table.")
@@ -114,7 +116,9 @@ class ProcessAttachment:
                 all_entries = accept_list + decline_list + tentative_list + no_response_list
 
                 # First, remove entries from all statuses
-                update_result = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_one(
+                update_result = self.mongo_connect_uri[self.db][
+                    self.prematch
+                ].update_one(
                     {"date": self.fuse_date},
                     {
                         "$pull": {
@@ -123,12 +127,14 @@ class ProcessAttachment:
                             "tentative": {"$in": all_entries},
                             "no_response": {"$in": all_entries},
                         }
-                    }
+                    },
                 )
                 self.logger.info(f"Updated {update_result.modified_count} documents.")
 
                 # Remove any documents that are not in any of the lists
-                update_result = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_many(
+                update_result = self.mongo_connect_uri[self.db][
+                    self.prematch
+                ].update_many(
                     {"date": self.fuse_date},
                     {
                         "$pull": {
@@ -137,12 +143,14 @@ class ProcessAttachment:
                             "tentative": {"$nin": tentative_list},
                             "no_response": {"$nin": no_response_list},
                         }
-                    }
+                    },
                 )
                 self.logger.info(f"Updated {update_result.modified_count} documents.")
 
                 # Next, add entries to their respective current status using $addToSet
-                update_result = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].update_one(
+                update_result = self.mongo_connect_uri[self.db][
+                    self.prematch
+                ].update_one(
                     {"date": self.fuse_date},
                     {
                         "$addToSet": {
@@ -151,7 +159,7 @@ class ProcessAttachment:
                             "tentative": {"$each": tentative_list},
                             "no_response": {"$each": no_response_list},
                         }
-                    }
+                    },
                 )
                 self.logger.info(f"Updated {update_result.modified_count} documents.")
                 break

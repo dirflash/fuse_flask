@@ -16,10 +16,11 @@ logger = logging.getLogger(__name__)
 class FuseDate:
     """FuseDate class gets/sets the Fuse date from Mongo"""
 
-    def get_fuse_date(self, mongo_connect_uri):
+    def get_fuse_date(self, mongo_connect_uri, db, area):
+        date_collection = area + "_date"
         try:
             # Attempt to get the fuse date from MongoDB
-            fuse_date_record = mongo_connect_uri[pref.MONGODB]["date"].find_one(
+            fuse_date_record = mongo_connect_uri[db][date_collection].find_one(
                 {}, sort=[("timestamp", DESCENDING), ("_id", DESCENDING)]
             )
 
@@ -45,9 +46,10 @@ class FuseDate:
             logger.error(f"An unexpected error occurred: {e}")
             return None
 
-    def set_fuse_date(self, mongo_connect_uri, fuse_date):
+    def set_fuse_date(self, mongo_connect_uri, db, area, fuse_date):
         """Set Fuse date in Mongo"""
-        new_fuse_date = mongo_connect_uri[pref.MONGODB]["date"].update_one(
+        date_collection = area + "_date"
+        new_fuse_date = mongo_connect_uri[db][date_collection].update_one(
             {"date": fuse_date},
             {
                 "$set": {

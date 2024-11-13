@@ -15,11 +15,11 @@ from cards import reminder_card as rc
 
 # pylint: disable=logging-fstring-interpolation, undefined-variable
 
-Mongo_Connection_URI: MongoClient = MongoClient(
+"""Mongo_Connection_URI: MongoClient = MongoClient(
     f"{pref.MONGO_URI}?retryWrites=true&w=majority",
     tlsCAFile=certifi.where(),
     serverSelectionTimeoutMS=500,
-)
+)"""
 
 console_formatter = logging.Formatter(
     "%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s"
@@ -56,7 +56,7 @@ headers = {
     "Content-Type": "application/json",
 }
 
-reminders_collection = Mongo_Connection_URI["fuse-test"]["cwa_reminders"]
+# reminders_collection = Mongo_Connection_URI["fuse-test"]["cwa_reminders"]
 
 
 async def send_message(session, email, payload, message_type):
@@ -101,7 +101,8 @@ async def send_message(session, email, payload, message_type):
             )
 
 
-async def main(fuse_date):
+async def main(fuse_date, db, area, Mongo_Connection_URI):
+    reminders = area + "_reminders"
     async with aiohttp.ClientSession() as session:
         tasks = []
         markdown_msg = (
@@ -136,7 +137,7 @@ async def main(fuse_date):
                     try:
                         # Attempt to unpack the tuple
                         message_id, email, status = result
-                        logger.info(f"Adding {email} message to reminders database")
+                        logger.info(f"Adding {email} message to {reminders} database")
                         # Create timestamp for Mountain Time Zone
                         ts = datetime.now()
                         # Add the UpdateOne operation to the list
@@ -171,14 +172,16 @@ async def main(fuse_date):
                 logger.info("Updating reminders database")
                 for attempt in range(5):
                     try:
-                        reminder_updates = reminders_collection.bulk_write(operations)
+                        reminder_updates = Mongo_Connection_URI[db][
+                            reminders
+                        ].bulk_write(operations)
                         if reminder_updates.upserted_ids:
                             logger.info(
                                 f"MongoDB upserted {len(reminder_updates.upserted_ids)} records."
                             )
                         break  # Exit the retry loop if successful
                     except BulkWriteError as bwe:
-                        print("Bulk Write Error: ", bwe.details)
+                        logger.error(f"Bulk Write Error: {bwe.details}")
                         sleep_duration = pow(2, attempt)
                         logger.warning(
                             f"*** Sleeping for {sleep_duration} seconds and trying again ***"
@@ -201,13 +204,15 @@ class Reminders:
     Class to process attachments
     """
 
-    def __init__(self, inside_fuse_date, mongo_connect_uri):
+    def __init__(self, inside_fuse_date, mongo_connect_uri, db, area):
         """
         Constructor
         """
         self.fuse_date = inside_fuse_date
         self.mongo_connect_uri = mongo_connect_uri
         self.logger = logging.getLogger(__name__)
+        self.db = db
+        self.area = area
 
     def send_reminders(self):
         """
@@ -216,7 +221,8 @@ class Reminders:
         try:
             # Retrieve the attendees record from the database
             self.logger.info("Retrieving attendees record")
-            attendees = self.mongo_connect_uri[pref.MONGODB]["cwa_prematch"].find_one(
+            prematch = self.area + "_prematch"
+            attendees = self.mongo_connect_uri[self.db][prematch].find_one(
                 {"date": self.fuse_date}
             )
             if attendees is None:
@@ -236,7 +242,9 @@ class Reminders:
                 "no_response": no_response_set,
             }
             logger.info(f" **** MESSAGE SETS: {message_sets}")
-            asyncio.run(main(self.fuse_date))
+            asyncio.run(
+                main(self.fuse_date, self.db, self.area, self.mongo_connect_uri)
+            )
             self.logger.info("Main function finished")
             return True, accepted_set, declined_set, tentative_set, no_response_set
         except ConnectionFailure as cf:

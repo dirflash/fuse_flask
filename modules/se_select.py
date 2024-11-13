@@ -1026,4 +1026,4 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
     if test_mode is False:
         return matches_filename
     else:
-        return NA
+        return "NA"

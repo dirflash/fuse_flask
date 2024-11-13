@@ -72,15 +72,29 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
 ALLOWED_EXTENSIONS = {"csv"}
 
-# Setup the MongoDB connection
-Mongo_Connection_URI: MongoClient = MongoClient(
-    f"{pref.MONGO_URI}?retryWrites=true&w=majority",
-    tlsCAFile=certifi.where(),
-    serverSelectionTimeoutMS=500,
-)
-
 # List of admin users
 admin_users = ["admin"]
+
+
+def mongodb_setup(mongo_un, mongo_bearer, mongo_host, mongo_db):
+    """
+    Setup the MongoDB connection
+    """
+
+    Mongo_Uri = f"mongodb+srv://{mongo_un}:{mongo_bearer}@{mongo_host}/{mongo_db}"
+
+    Mongo_Connection_URI: MongoClient = MongoClient(
+        f"{Mongo_Uri}?retryWrites=true&w=majority",
+        tlsCAFile=certifi.where(),
+        serverSelectionTimeoutMS=500,
+    )
+    try:
+        Mongo_Connection_URI.admin.command("ping")
+    except Exception as e:
+        app.logger.error(f"Error connecting to MongoDB: {e}")
+        return None
+    app.logger.info("Connected to MongoDB")
+    return Mongo_Connection_URI
 
 
 def allowed_file(filename):
@@ -101,8 +115,9 @@ def sample_accepted_message(next_date):
     return current_message
 
 
-def se_present(Mongo_Connect_URI, fuse_date):
-    attendees = Mongo_Connect_URI[pref.MONGODB]["cwa_prematch"].find_one(
+def se_present(Mongo_Connect_URI, fuse_date, db, area):
+    prematch = area + "_prematch"
+    attendees = Mongo_Connect_URI[db][prematch].find_one(
         {"date": fuse_date}, {"_id": 0}
     )  # type: ignore
     if attendees:
@@ -120,8 +135,9 @@ def se_present(Mongo_Connect_URI, fuse_date):
     return se_set
 
 
-def mongo_attendance(Mongo_Connect_URI, fuse_date, names_list):
-    attendance_collection = Mongo_Connect_URI[pref.MONGODB]["cwa_attendance"]
+def mongo_attendance(Mongo_Connect_URI, fuse_date, names_list, db, area):
+    attendance_area = area + "_attendance"
+    attendance_collection = Mongo_Connect_URI[db][attendance_area]
     attendance = attendance_collection.find_one(
         {"date": fuse_date}, {"_id": 0}
     )  # type: ignore
@@ -144,8 +160,10 @@ def mongo_attendance(Mongo_Connect_URI, fuse_date, names_list):
 
 
 # Function to get attendance
-def get_attendance(Mongo_Connect_URI, fuse_date):
-    attendance_collection = Mongo_Connect_URI[pref.MONGODB]["cwa_attendance"]
+def get_attendance(Mongo_Connect_URI, fuse_date, db, area):
+    # attendance_collection = Mongo_Connect_URI[pref.MONGODB]["cwa_attendance"]
+    attendance_area = area + "_attendance"
+    attendance_collection = Mongo_Connect_URI[db][attendance_area]
     attendance = attendance_collection.find_one(
         {"date": fuse_date}, {"_id": 0}
     )  # type: ignore
@@ -280,25 +298,62 @@ def home():
     if username is not None:
         app.logger.info(f"{username} accessed the home page route...")
 
-        # Get the Fuse date
-        fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
-        if fuse_date is None:
-            app.logger.info("Fuse date not found")
-            if "X-FuseDate" in session:
-                del session["X-FuseDate"]
-            return redirect(url_for("set_fuse_date"))
-        session["X-FuseDate"] = fuse_date
-        fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
-        if fuse_date is None:
-            fuse_date = "Not set"
-        elif fuse_date_obj < current_date:
-            fuse_date = "Expired"
-            app.logger.info("Fuse date expired")
-            flash("Fuse date needs to be set.")
-            return redirect(url_for("set_fuse_date"))
-        else:
-            app.logger.info(f"Fuse date: {fuse_date}")
-            app.logger.info(f"Current date: {current_date}")
+        # Get user info from MongoDB
+        Mongo_Connection_URI = mongodb_setup(
+            pref.MONGOUSERLOOKUP,
+            pref.MONGOUSERBEARER,
+            pref.MONGOHOST,
+            "fuse-db",
+        )
+        try:
+            user_info = Mongo_Connection_URI["fuse-db"]["admins"].find_one(
+                {"username": username}, {"_id": 0}
+            )
+            if user_info is not None:
+                app.logger.info(f"User info found: {user_info}")
+            else:
+                app.logger.info(f"User info not found for {username}")
+        except Exception as e:
+            app.logger.error(f"Error getting user info from MongoDB: {e}")
+            user_info = None
+
+        if user_info is not None:
+
+            # Get the Fuse date
+            user_db = user_info.get("mongo_db")
+            user_area = user_info.get("area")
+            # add user_db and user_area to the session
+            session["user_db"] = user_db
+            session["user_area"] = user_area
+            app.logger.info(f"User database: {user_db}")
+
+            Mongo_Connection_URI = mongodb_setup(
+                pref.CWA_SE_USER,
+                pref.CWA_SE_BEARER,
+                pref.MONGOHOST,
+                user_db,
+            )
+
+            fuse_date = FuseDate().get_fuse_date(
+                Mongo_Connection_URI, user_db, user_area
+            )
+            if fuse_date is None:
+                app.logger.info("Fuse date not found")
+                if "X-FuseDate" in session:
+                    del session["X-FuseDate"]
+                return redirect(url_for("set_fuse_date"))
+            session["X-FuseDate"] = fuse_date
+            fuse_date_obj = datetime.strptime(fuse_date, "%Y-%m-%d").date()
+            if fuse_date is None:
+                fuse_date = "Not set"
+            elif fuse_date_obj < current_date:
+                fuse_date = "Expired"
+                app.logger.info("Fuse date expired")
+                flash("Fuse date needs to be set.")
+                return redirect(url_for("set_fuse_date"))
+            else:
+                app.logger.info(f"Fuse date: {fuse_date}")
+                app.logger.info(f"Current date: {current_date}")
     else:
         app.logger.info("No username found in session")
         fuse_date_obj = None
@@ -329,9 +384,20 @@ def set_fuse_date():
         app.logger.info(f"New fuse date: {new_fuse_date}")
         session["X-FuseDate"] = new_fuse_date
 
+        # Get user db and area from the session
+        user_db = session.get("user_db")
+        area = session.get("user_area")
+
+        Mongo_Connection_URI = mongodb_setup(
+            pref.CWA_SE_USER,
+            pref.CWA_SE_BEARER,
+            pref.MONGOHOST,
+            user_db,
+        )
+
         try:
             # Update the Fuse date in MongoDB
-            FuseDate().set_fuse_date(Mongo_Connection_URI, new_fuse_date)
+            FuseDate().set_fuse_date(Mongo_Connection_URI, user_db, area, new_fuse_date)
 
             # Redirect to the home page after updating
             return redirect(url_for("home"))
@@ -343,8 +409,20 @@ def set_fuse_date():
             return render_template("set_fuse_date.html", error=error_message)
 
     app.logger.info("Get fuse date route...")
+
+    # Get user db and area from the session
+    user_db = session.get("user_db")
+    area = session.get("user_area")
+
+    Mongo_Connection_URI = mongodb_setup(
+        pref.CWA_SE_USER,
+        pref.CWA_SE_BEARER,
+        pref.MONGOHOST,
+        user_db,
+    )
+
     # Get the Fuse date
-    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI, user_db, area)
     current_date = date.today()
 
     if fuse_date is None:
@@ -503,12 +581,38 @@ def process_csv():
     """
     app.logger.info("Process CSV file route...")
     filename = session.get("X-Filename")
-    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI)
+
+    # Get user db and area from the session
+    user_db = session.get("user_db")
+    area = session.get("user_area")
+
+    Mongo_Connection_URI = mongodb_setup(
+        pref.CWA_SE_USER,
+        pref.CWA_SE_BEARER,
+        pref.MONGOHOST,
+        user_db,
+    )
+
+    # Get the Fuse date
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI, user_db, area)
+
     app.logger.info(f"File name: {filename}")
     if filename is None:
         return render_template("process_csv.html", filename="None")
+
+    # Get user db and area from the session
+    user_db = session.get("user_db")
+    area = session.get("user_area")
+
+    Mongo_Connection_URI = mongodb_setup(
+        pref.CWA_SE_USER,
+        pref.CWA_SE_BEARER,
+        pref.MONGOHOST,
+        user_db,
+    )
+
     accept, decline, tentative, no_response = ProcessAttachment(
-        fuse_date, filename, Mongo_Connection_URI
+        fuse_date, filename, Mongo_Connection_URI, user_db, area
     ).process()
     return render_template(
         "process_csv.html",
@@ -538,7 +642,21 @@ def send_reminders():
 
     # Send reminders
     app.logger.info("Sending reminders...")
-    reminders_result = Reminders(fuse_date, Mongo_Connection_URI).send_reminders()
+
+    # Get user db and area from the session
+    user_db = session.get("user_db")
+    area = session.get("user_area")
+
+    Mongo_Connection_URI = mongodb_setup(
+        pref.CWA_SE_USER,
+        pref.CWA_SE_BEARER,
+        pref.MONGOHOST,
+        user_db,
+    )
+
+    reminders_result = Reminders(
+        fuse_date, Mongo_Connection_URI, user_db, area
+    ).send_reminders()
     if reminders_result is None:
         app.logger.error("Failed to send reminders")
         return render_template("error.html", message="Failed to send reminders.")
@@ -614,8 +732,19 @@ def special_guest():
 def se_attendance():
     fuse_date = session.get("X-FuseDate")
     file_name = session.get("X-Filename")
+    # Get user db and area from the session
+    user_db = session.get("user_db")
+    area = session.get("user_area")
+
+    Mongo_Connection_URI = mongodb_setup(
+        pref.CWA_SE_USER,
+        pref.CWA_SE_BEARER,
+        pref.MONGOHOST,
+        user_db,
+    )
+
     # Get the list of names from the database
-    se_set = se_present(Mongo_Connection_URI, fuse_date)
+    se_set = se_present(Mongo_Connection_URI, fuse_date, user_db, area)
     attendees = attendee_dict(se_set)
     se_dict = letter_list(attendees)
 
@@ -637,8 +766,22 @@ def submit_names():
     fuse_date = session.get("X-FuseDate")
     selected_names = request.form.getlist("names")
     logging.info(f"Selected names: {selected_names}")
+
+    # Get user db and area from the session
+    user_db = session.get("user_db")
+    area = session.get("user_area")
+
+    Mongo_Connection_URI = mongodb_setup(
+        pref.CWA_SE_USER,
+        pref.CWA_SE_BEARER,
+        pref.MONGOHOST,
+        user_db,
+    )
+
     # Update the database with the selected names in cwa_attendance
-    attendance = mongo_attendance(Mongo_Connection_URI, fuse_date, selected_names)
+    attendance = mongo_attendance(
+        Mongo_Connection_URI, fuse_date, selected_names, user_db, area
+    )
     if attendance > 0:
         flash("Attendance updated successfully")
         logging.info("Attendance updated successfully")
@@ -658,13 +801,39 @@ def match():
     app.logger.info(f"SE match route with method: {request.method}")
     fuse_date = session.get("X-FuseDate")
     mode = session.get("mode")
+
+    # Get user db and area from the session
+    user_db = session.get("user_db")
+    area = session.get("user_area")
+
+    New_Mongo_Connection_URI = mongodb_setup(
+        pref.CWA_SE_USER,
+        pref.CWA_SE_BEARER,
+        pref.MONGOHOST,
+        user_db,
+    )
+
+    # Setup the MongoDB connection
+    Mongo_Connection_URI: MongoClient = MongoClient(
+        f"{pref.MONGO_URI}?retryWrites=true&w=majority",
+        tlsCAFile=certifi.where(),
+        serverSelectionTimeoutMS=500,
+    )
+
     if fuse_date is None:
         app.logger.error("Fuse date not found in session")
     if request.method == "POST":
         match_file = "NA"
         app.logger.info("SE match post route...")
         # Match attending SEs
-        se_set = get_attendance(Mongo_Connection_URI, fuse_date)
+        se_set = get_attendance(New_Mongo_Connection_URI, fuse_date, user_db, area)
+        # Does "mode" exist in the session?
+        if "mode" not in session:
+            mode = "production"
+            session["mode"] = mode
+        # if "mode" exists in the session, get the value of "mode"
+        else:
+            mode = session.get("mode")
         # SE matching process. Returns the file name of the match file
         status = se_select(fuse_date, Mongo_Connection_URI, se_set, mode)
         if status == "NA":
@@ -692,7 +861,7 @@ def match():
         )
     app.logger.info("SE match get route...")
     # Get the list of names from the database
-    se_set = get_attendance(Mongo_Connection_URI, fuse_date)
+    se_set = get_attendance(New_Mongo_Connection_URI, fuse_date, user_db, area)
     attendees = attendee_dict(se_set)
     se_dict = letter_list(attendees)
 
