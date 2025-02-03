@@ -32,8 +32,12 @@ content %}
     {% endif %}
   </div>
   <div class="column">
-    {% if csv_file %}
-    <a href="/{{ csv_file }}" class="button is-link">Download CSV</a>
+    {% if match_file %}
+    <a
+      href="{{ url_for('download_csv', filename=match_file) }}"
+      class="button is-link"
+      >Download CSV</a
+    >
     {% endif %}
   </div>
 </div>

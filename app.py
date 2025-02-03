@@ -1025,7 +1025,6 @@ def match():
             match_file=match_file,
             user_db=user_db,
             data=df.to_html(index=False, classes="table table-striped"),
-            csv_file=csv_file,
         )
 
     app.logger.info("SE match get route...")
@@ -1048,6 +1047,11 @@ def match():
         test_mode=mode,
         user_db=user_db,
     )
+
+
+@app.route("/download_csv/<filename>")
+def download_csv(filename):
+    return send_from_directory(directory="match_files", path=filename)
 
 
 @app.route("/update-mode", methods=["POST"])
