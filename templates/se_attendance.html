@@ -1,6 +1,14 @@
 {% extends "base.html" %} {% block title %}FUSE Attendees{% endblock %} {% block
 content %}
 <h1 class="title">Select FUSE Attendees</h1>
+
+<div class="field">
+  <label class="label">Search for a name:</label>
+  <div class="control">
+    <input class="input" type="text" id="searchBox" placeholder="Search..." />
+  </div>
+</div>
+
 <form action="{{ url_for('submit_names') }}" method="post">
   {% for letter, names in sorted_names.items() %}
   <h2
@@ -10,11 +18,11 @@ content %}
   </h2>
   <div class="columns is-multiline is-narrow">
     {% for name in names %}
-    <div class="column is-one-third">
+    <div class="column is-one-third name-column">
       <div class="field is-flex is-align-items-center is-flex-direction-column">
         <label class="checkbox is-size-5">
           <input type="checkbox" name="names" value="{{ name }}" checked />
-          {{ name }}
+          <span class="name">{{ name }}</span>
         </label>
       </div>
     </div>
@@ -30,4 +38,21 @@ content %}
     </button>
   </div>
 </form>
+
+<script>
+  document.getElementById("searchBox").addEventListener("input", function () {
+    var searchValue = this.value.toLowerCase();
+    var nameColumns = document.querySelectorAll(".name-column");
+
+    nameColumns.forEach(function (column) {
+      var name = column.querySelector(".name").textContent.toLowerCase();
+      if (name.includes(searchValue) || searchValue === "") {
+        column.style.display = "";
+      } else {
+        column.style.display = "none";
+      }
+    });
+  });
+</script>
+
 {% endblock %}
