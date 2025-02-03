@@ -4,8 +4,6 @@ from datetime import datetime, timezone
 from pymongo import DESCENDING
 from pymongo.errors import PyMongoError
 
-import modules.preferences.preferences as pref
-
 # pylint: disable=logging-fstring-interpolation
 
 # Logging to Flask console
@@ -16,13 +14,21 @@ logger = logging.getLogger(__name__)
 class FuseDate:
     """FuseDate class gets/sets the Fuse date from Mongo"""
 
-    def get_fuse_date(self, mongo_connect_uri, db, area):
-        date_collection = area + "_date"
+    def get_fuse_date(self, mongo_connect_uri, db, area, mode):
+        if mode == "debug":
+            logger.info("Get Fuse Date - Debug mode")
+            date_collection = "date"
+        else:
+            date_collection = area + "_date"
         try:
             # Attempt to get the fuse date from MongoDB
-            fuse_date_record = mongo_connect_uri[db][date_collection].find_one(
-                {}, sort=[("timestamp", DESCENDING), ("_id", DESCENDING)]
-            )
+            logger.info(f"Fetching fuse date from MongoDB: {db}")
+            try:
+                fuse_date_record = mongo_connect_uri[db][date_collection].find_one(
+                    {}, sort=[("timestamp", DESCENDING), ("_id", DESCENDING)]
+                )
+            except Exception as e:
+                logger.error(f"Error fetching fuse date from MongoDB: {e}")
 
             # Check if a record was found
             if fuse_date_record is None:
@@ -46,9 +52,15 @@ class FuseDate:
             logger.error(f"An unexpected error occurred: {e}")
             return None
 
-    def set_fuse_date(self, mongo_connect_uri, db, area, fuse_date):
+    def set_fuse_date(self, mongo_connect_uri, db, area, fuse_date, mode):
         """Set Fuse date in Mongo"""
-        date_collection = area + "_date"
+        logger.info(
+            f"Setting fuse date in MongoDB (mode: {mode} db: {db}): {fuse_date}"
+        )
+        if mode == "debug":
+            date_collection = "date"
+        else:
+            date_collection = area + "_date"
         new_fuse_date = mongo_connect_uri[db][date_collection].update_one(
             {"date": fuse_date},
             {
@@ -57,7 +69,7 @@ class FuseDate:
                     "date": fuse_date,
                 }
             },
-            upsert=True,
+            upsert=True,  # Insert a new document if no match is found
         )
 
         document_id = (

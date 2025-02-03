@@ -633,6 +633,12 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
             """ Clean up se_dict and region_plus_median list before selecting SE2 """
             logger.info("Clean up before selecting SE2.")
 
+            # Check if vips exists, if it doesn't, create an empty set
+            if "vips" not in locals():
+                vips = set()
+            elif not vips:
+                vips = set()
+
             # Clean up after selecting se1
             cleanup_se(se1_region, se1, se_dict, sem_set, SEs, top_ses, vips, zero_set)
 
@@ -1024,6 +1030,10 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
     logger.info(f"Total time to complete: {end_time - start_time:.6f} seconds.")
 
     if test_mode is False:
+        logger.info("test mode is False. Return matches_filename.")
+        logger.info("SE select function complete.")
         return matches_filename
 
+    logger.info("test mode is True. Return NA.")
+    logger.info("SE select function complete.")
     return "NA"

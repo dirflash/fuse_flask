@@ -176,10 +176,14 @@
           {% if match_file != "NA" %}
           <p>Match File: {{ match_file }}</p>
           {% endif %}
+          {% if user_db != "NA" %}
+          <p>Database: {{ user_db }}</p>
+          {% endif %}
           {% else %}
           <p>Session Username: Not set</p>
           <p>Fuse Date: Not available</p>
           <p>File Name: Not available</p>
+          <p>Match File: Not available</p>
           {% endif %}
         </div>
         <div>

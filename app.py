@@ -16,13 +16,12 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_file,
     send_from_directory,
     session,
     url_for,
 )
 from pymongo import MongoClient
-from werkzeug.exceptions import RequestEntityTooLarge
+from pymongo.errors import OperationFailure
 from werkzeug.utils import secure_filename
 
 import modules.preferences.preferences as pref
@@ -76,18 +75,35 @@ ALLOWED_EXTENSIONS = {"csv"}
 admin_users = ["admin"]
 
 
-def mongodb_setup(mongo_un, mongo_bearer, mongo_host, mongo_db):
+def mongodb_setup_un():
     """
     Setup the MongoDB connection
     """
 
-    Mongo_Uri = f"mongodb+srv://{mongo_un}:{mongo_bearer}@{mongo_host}/{mongo_db}"
+    if "mode" in session:
+        mode = session.get("mode")
+        user_db = session.get("user_db")
+    else:
+        mode = "debug"
+        user_db = "fuse-test"
 
-    Mongo_Connection_URI: MongoClient = MongoClient(
-        f"{Mongo_Uri}?retryWrites=true&w=majority",
-        tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=500,
-    )
+    # Setup the MongoDB connection
+    # if mode exists in the session, get the value of mode
+    if mode == "debug":
+        app.logger.info("Debug mode database connection...")
+        Mongo_Connection_URI = MongoClient(
+            f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+            f"?retryWrites=true&w=majority&tlsCAFile={certifi.where()}"
+            f"&serverSelectionTimeoutMS=500"
+        )
+    else:
+        app.logger.info("Production mode database connection...")
+        Mongo_Connection_URI = MongoClient(
+            f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+            f"?retryWrites=true&w=majority&tlsCAFile={certifi.where()}"
+            f"&serverSelectionTimeoutMS=500"
+        )
+
     try:
         Mongo_Connection_URI.admin.command("ping")
     except Exception as e:
@@ -298,13 +314,36 @@ def home():
     if username is not None:
         app.logger.info(f"{username} accessed the home page route...")
 
-        # Get user info from MongoDB
-        Mongo_Connection_URI = mongodb_setup(
-            pref.MONGOUSERLOOKUP,
-            pref.MONGOUSERBEARER,
-            pref.MONGOHOST,
-            "fuse-db",
+        # Get user db from the session
+        user_db = "fuse-test"
+        mode = "debug"
+        if "mode" in session:
+            mode = session.get("mode")
+            if session["mode"] == "debug":
+                user_db = "fuse-test"
+            else:
+                # Set mode to debug in the session
+                logging.info("Setting mode to debug in the session")
+                session["mode"] = "debug"
+                user_db = session.get("user_db")
+
+        # Get user info from MongoDB in the "fuse-db" database
+        Mongo_URI = f"mongodb+srv://{pref.MONGOUSERLOOKUP}:{pref.MONGOUSERBEARER}@{pref.MONGOHOST}/fuse-db"
+
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_URI}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
         )
+
+        # Check if the connection to MongoDB is successful
+        try:
+            Mongo_Connection_URI.admin.command("ping")
+        except Exception as e:
+            app.logger.error(f"Error connecting to MongoDB: {e}")
+            return None
+        app.logger.info("Connected to MongoDB fuse-db for user info")
+
         try:
             user_info = Mongo_Connection_URI["fuse-db"]["admins"].find_one(
                 {"username": username}, {"_id": 0}
@@ -325,17 +364,34 @@ def home():
             # add user_db and user_area to the session
             session["user_db"] = user_db
             session["user_area"] = user_area
+            if "mode" not in session:
+                session["mode"] = "debug"
             app.logger.info(f"User database: {user_db}")
 
-            Mongo_Connection_URI = mongodb_setup(
-                pref.CWA_SE_USER,
-                pref.CWA_SE_BEARER,
-                pref.MONGOHOST,
-                user_db,
+            # MongoDB connection setup for the fuse date user
+            Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+            Mongo_Connection_URI = MongoClient(
+                f"{Mongo_Uri}?retryWrites=true&w=majority",
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=500,
+            )
+
+            try:
+                Mongo_Connection_URI.admin.command("ping")
+            except Exception as e:
+                app.logger.error(
+                    f"Error connecting to MongoDB ({user_db}) for set fuse date route: {e}"
+                )
+                return None
+            app.logger.info(
+                f"Connected to MongoDB ({user_db}) for set fuse date route."
             )
 
             fuse_date = FuseDate().get_fuse_date(
-                Mongo_Connection_URI, user_db, user_area
+                Mongo_Connection_URI,
+                user_db,
+                user_area,
+                mode,
             )
             if fuse_date is None:
                 app.logger.info("Fuse date not found")
@@ -377,6 +433,18 @@ def get_session():
 @app.route("/set_fuse_date", methods=["GET", "POST"])
 @login_required
 def set_fuse_date():
+
+    # Get user db and area from the session
+    user_db = "fuse-test"
+    mode = "debug"
+    if "mode" in session:
+        mode = session.get("mode")
+        if session["mode"] == "debug":
+            user_db = "fuse-test"
+        else:
+            user_db = session.get("user_db")
+    area = session.get("user_area")
+
     if request.method == "POST":
         app.logger.info("Set fuse date route...")
         # Get the new fuse date from the form
@@ -384,23 +452,42 @@ def set_fuse_date():
         app.logger.info(f"New fuse date: {new_fuse_date}")
         session["X-FuseDate"] = new_fuse_date
 
-        # Get user db and area from the session
-        user_db = session.get("user_db")
-        area = session.get("user_area")
+        # MongoDB connection setup for the fuse date user
 
-        Mongo_Connection_URI = mongodb_setup(
-            pref.CWA_SE_USER,
-            pref.CWA_SE_BEARER,
-            pref.MONGOHOST,
-            user_db,
+        Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
         )
 
         try:
+            Mongo_Connection_URI.admin.command("ping")
+        except Exception as e:
+            app.logger.error(
+                f"Error connecting to MongoDB ({user_db}) for set fuse date route: {e}"
+            )
+            return None
+        app.logger.info(f"Connected to MongoDB ({user_db}) for set fuse date route.")
+
+        try:
             # Update the Fuse date in MongoDB
-            FuseDate().set_fuse_date(Mongo_Connection_URI, user_db, area, new_fuse_date)
+            FuseDate().set_fuse_date(
+                Mongo_Connection_URI, user_db, area, new_fuse_date, mode
+            )
 
             # Redirect to the home page after updating
             return redirect(url_for("home"))
+        except OperationFailure as e:
+            app.logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            app.logger.error(f"Error setting the fuse date: {e}")
+            app.logger.error(f"User Name: {pref.CWA_SE_USER}")
+            app.logger.error(f"User DB: {user_db}")
+            app.logger.error(f"Area: {area}")
+            app.logger.error(f"New Fuse Date: {new_fuse_date}")
+            app.logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            flash("Error setting the fuse date.")
+            return redirect(url_for("set_fuse_date"))
         except ValueError:
             # Handle invalid date format
             error_message = (
@@ -410,19 +497,11 @@ def set_fuse_date():
 
     app.logger.info("Get fuse date route...")
 
-    # Get user db and area from the session
-    user_db = session.get("user_db")
-    area = session.get("user_area")
-
-    Mongo_Connection_URI = mongodb_setup(
-        pref.CWA_SE_USER,
-        pref.CWA_SE_BEARER,
-        pref.MONGOHOST,
-        user_db,
-    )
+    Mongo_Connection_URI = mongodb_setup_un()
 
     # Get the Fuse date
-    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI, user_db, area)
+    app.logger.info("Getting the Fuse date...")
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI, user_db, area, mode)
     current_date = date.today()
 
     if fuse_date is None:
@@ -440,6 +519,7 @@ def set_fuse_date():
             else:
                 app.logger.info(f"Fuse date: {fuse_date_obj}")
                 app.logger.info(f"Current date: {current_date}")
+                session["X-FuseDate"] = fuse_date
 
     return render_template(
         "set_fuse_date.html",
@@ -581,35 +661,47 @@ def process_csv():
     """
     app.logger.info("Process CSV file route...")
     filename = session.get("X-Filename")
+    mode = session.get("mode")
 
-    # Get user db and area from the session
-    user_db = session.get("user_db")
+    if mode == "debug":
+        user_db = "fuse-test"
+    else:
+        user_db = session.get("user_db")
+
     area = session.get("user_area")
 
-    Mongo_Connection_URI = mongodb_setup(
-        pref.CWA_SE_USER,
-        pref.CWA_SE_BEARER,
-        pref.MONGOHOST,
-        user_db,
-    )
+    # MongoDB connection setup for processing the CSV file
+    if mode == "debug":
+        Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
+    try:
+        Mongo_Connection_URI.admin.command("ping")
+    except Exception as e:
+        app.logger.error(
+            f"Error connecting to MongoDB ({user_db}) for set fuse date route: {e}"
+        )
+        return None
+    app.logger.info(f"Connected to MongoDB ({user_db}) for set fuse date route.")
 
     # Get the Fuse date
-    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI, user_db, area)
+    app.logger.info("Getting the Fuse date...")
+    fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI, user_db, area, mode)
 
     app.logger.info(f"File name: {filename}")
     if filename is None:
         return render_template("process_csv.html", filename="None")
-
-    # Get user db and area from the session
-    user_db = session.get("user_db")
-    area = session.get("user_area")
-
-    Mongo_Connection_URI = mongodb_setup(
-        pref.CWA_SE_USER,
-        pref.CWA_SE_BEARER,
-        pref.MONGOHOST,
-        user_db,
-    )
 
     accept, decline, tentative, no_response = ProcessAttachment(
         fuse_date, filename, Mongo_Connection_URI, user_db, area
@@ -622,6 +714,7 @@ def process_csv():
         tentative=tentative,
         no_response=no_response,
         admin_users=admin_users,
+        user_db=user_db,
     )
 
 
@@ -647,12 +740,7 @@ def send_reminders():
     user_db = session.get("user_db")
     area = session.get("user_area")
 
-    Mongo_Connection_URI = mongodb_setup(
-        pref.CWA_SE_USER,
-        pref.CWA_SE_BEARER,
-        pref.MONGOHOST,
-        user_db,
-    )
+    Mongo_Connection_URI = mongodb_setup_un()
 
     reminders_result = Reminders(
         fuse_date, Mongo_Connection_URI, user_db, area
@@ -730,18 +818,42 @@ def special_guest():
 @app.route("/se_attendance", methods=["GET", "POST"])
 @login_required
 def se_attendance():
+    app.logger.info("SE attendance route...")
     fuse_date = session.get("X-FuseDate")
-    file_name = session.get("X-Filename")
-    # Get user db and area from the session
-    user_db = session.get("user_db")
+    filename = session.get("X-Filename")
+    mode = session.get("mode")
+
+    if mode == "debug":
+        user_db = "fuse-test"
+    else:
+        user_db = session.get("user_db")
+
     area = session.get("user_area")
 
-    Mongo_Connection_URI = mongodb_setup(
-        pref.CWA_SE_USER,
-        pref.CWA_SE_BEARER,
-        pref.MONGOHOST,
-        user_db,
-    )
+    # MongoDB connection setup for selecting SEs
+    if mode == "debug":
+        Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
+    try:
+        Mongo_Connection_URI.admin.command("ping")
+    except Exception as e:
+        app.logger.error(
+            f"Error connecting to MongoDB ({user_db}) for set fuse date route: {e}"
+        )
+        return None
+    app.logger.info(f"Connected to MongoDB ({user_db}) for set fuse date route.")
 
     # Get the list of names from the database
     se_set = se_present(Mongo_Connection_URI, fuse_date, user_db, area)
@@ -757,7 +869,8 @@ def se_attendance():
         "se_attendance.html",
         sorted_names=sorted_dict,
         admin_users=admin_users,
-        file_name=file_name,
+        file_name=filename,
+        user_db=user_db,
     )
 
 
@@ -765,18 +878,43 @@ def se_attendance():
 def submit_names():
     fuse_date = session.get("X-FuseDate")
     selected_names = request.form.getlist("names")
+    filename = session.get("X-Filename")
     logging.info(f"Selected names: {selected_names}")
 
+    mode = session.get("mode")
+
     # Get user db and area from the session
-    user_db = session.get("user_db")
+    if mode == "debug":
+        user_db = "fuse-test"
+    else:
+        user_db = session.get("user_db")
+
     area = session.get("user_area")
 
-    Mongo_Connection_URI = mongodb_setup(
-        pref.CWA_SE_USER,
-        pref.CWA_SE_BEARER,
-        pref.MONGOHOST,
-        user_db,
-    )
+    # MongoDB connection setup for submitting attending SEs
+    if mode == "debug":
+        Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
+    try:
+        Mongo_Connection_URI.admin.command("ping")
+    except Exception as e:
+        app.logger.error(
+            f"Error connecting to MongoDB ({user_db}) for set fuse date route: {e}"
+        )
+        return None
+    app.logger.info(f"Connected to MongoDB ({user_db}) for set fuse date route.")
 
     # Update the database with the selected names in cwa_attendance
     attendance = mongo_attendance(
@@ -792,33 +930,54 @@ def submit_names():
         "selected_names.html",
         selected_names=selected_names,
         admin_users=admin_users,
+        user_db=user_db,
     )
 
 
 @app.route("/match", methods=["GET", "POST"])
 @login_required
 def match():
+    app.logger.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     app.logger.info(f"SE match route with method: {request.method}")
+    app.logger.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     fuse_date = session.get("X-FuseDate")
     mode = session.get("mode")
 
     # Get user db and area from the session
-    user_db = session.get("user_db")
+    if mode == "debug":
+        app.logger.info("Debug mode database connection...")
+        user_db = "fuse-test"
+    else:
+        user_db = session.get("user_db")
+
+    # Get user db and area from the session
     area = session.get("user_area")
+    mongo_db = session.get("mongo_db")
 
-    New_Mongo_Connection_URI = mongodb_setup(
-        pref.CWA_SE_USER,
-        pref.CWA_SE_BEARER,
-        pref.MONGOHOST,
-        user_db,
-    )
+    # MongoDB connection setup for processing the CSV file
+    if mode == "debug":
+        Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
 
-    # Setup the MongoDB connection
-    Mongo_Connection_URI: MongoClient = MongoClient(
-        f"{pref.MONGO_URI}?retryWrites=true&w=majority",
-        tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=500,
-    )
+    try:
+        Mongo_Connection_URI.admin.command("ping")
+    except Exception as e:
+        app.logger.error(
+            f"Error connecting to MongoDB ({user_db}) for set fuse date route: {e}"
+        )
+        return None
+    app.logger.info(f"Connected to MongoDB ({user_db}) for set fuse date route.")
 
     if fuse_date is None:
         app.logger.error("Fuse date not found in session")
@@ -826,7 +985,7 @@ def match():
         match_file = "NA"
         app.logger.info("SE match post route...")
         # Match attending SEs
-        se_set = get_attendance(New_Mongo_Connection_URI, fuse_date, user_db, area)
+        se_set = get_attendance(Mongo_Connection_URI, fuse_date, user_db, area)
         # Does "mode" exist in the session?
         if "mode" not in session:
             mode = "production"
@@ -835,9 +994,10 @@ def match():
         else:
             mode = session.get("mode")
         # SE matching process. Returns the file name of the match file
-        status = se_select(fuse_date, Mongo_Connection_URI, se_set, mode)
+        status = se_select(fuse_date, Mongo_Connection_URI, se_set)  # , mode)
         if status == "NA":
             app.logger.warning("No SEs match file created.")
+            match_file = "NA"
         # check if status is a 3 digit http error code
         elif status == "500":
             # return errorhandler
@@ -846,6 +1006,7 @@ def match():
         else:
             app.logger.info(f"SE match file ({status}) created.")
             match_file = status
+            # TODO: Render the match file
         #
         #
         #
@@ -858,10 +1019,11 @@ def match():
             fuse_date=fuse_date,
             test_mode=mode,
             match_file=match_file,
+            user_db=user_db,
         )
     app.logger.info("SE match get route...")
     # Get the list of names from the database
-    se_set = get_attendance(New_Mongo_Connection_URI, fuse_date, user_db, area)
+    se_set = get_attendance(Mongo_Connection_URI, fuse_date, user_db, area)
     attendees = attendee_dict(se_set)
     se_dict = letter_list(attendees)
 
@@ -877,6 +1039,7 @@ def match():
         admin_users=admin_users,
         total_names=len(se_set),
         test_mode=mode,
+        user_db=user_db,
     )
 
 
