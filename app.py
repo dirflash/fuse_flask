@@ -607,7 +607,7 @@ def upload_file():
             app.logger.info(f"Session cookie: {session}")
 
             # Render the upload template with the file details
-            app.logger.info("Rendering upload template (line 434)...")
+            app.logger.info("Rendering upload template...")
 
             return render_template(
                 "upload.html",
@@ -998,6 +998,7 @@ def match():
         if status == "NA":
             app.logger.warning("No SEs match file created.")
             match_file = "NA"
+            df = None
         # check if status is a 3 digit http error code
         elif status == "500":
             # return errorhandler
@@ -1006,13 +1007,16 @@ def match():
         else:
             app.logger.info(f"SE match file ({status}) created.")
             match_file = status
-            # TODO: Render the match file
+            csv_file = f"match_files/{status}"
+            # Read the match file into a Pandas DataFrame
+            df = pd.read_csv(csv_file)
         #
         #
         #
         mode = session.get("mode")
         if mode == "debug":
             flash(f"Mode: {mode}")
+
         return render_template(
             "post_match.html",
             admin_users=admin_users,
@@ -1020,7 +1024,10 @@ def match():
             test_mode=mode,
             match_file=match_file,
             user_db=user_db,
+            data=df.to_html(index=False, classes="table table-striped"),
+            csv_file=csv_file,
         )
+
     app.logger.info("SE match get route...")
     # Get the list of names from the database
     se_set = get_attendance(Mongo_Connection_URI, fuse_date, user_db, area)

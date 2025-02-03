@@ -18,4 +18,24 @@ content %}
 <p class="is-size-5">No Fuse Date Set</p>
 {% else %}
 <p class="is-size-5">Fuse Date: {{ fuse_date }}</p>
-{% endif %} {% endblock %}
+{% endif %}
+
+<div class="columns">
+  <div class="column"></div>
+  <div class="column">
+    {% if data %}
+    <div class="table-container" style="text-align: center">
+      {{ data|safe }}
+    </div>
+    {% else %}
+    <p class="is-size-5">No data available</p>
+    {% endif %}
+  </div>
+  <div class="column">
+    {% if csv_file %}
+    <a href="/{{ csv_file }}" class="button is-link">Download CSV</a>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
