@@ -42,11 +42,15 @@ content %}
 <script>
   document.getElementById('searchBox').addEventListener('input', function () {
     var searchValue = this.value.toLowerCase();
+    var searchTerms = searchValue.split(' ').filter(Boolean); // Remove empty strings
     var nameColumns = document.querySelectorAll('.name-column');
 
     nameColumns.forEach(function (column) {
       var name = column.querySelector('.name').textContent.toLowerCase();
-      if (name.includes(searchValue) || searchValue === '') {
+      var matches = searchTerms.every(function (term) {
+        return name.includes(term);
+      });
+      if (matches || searchValue === '') {
         column.style.display = '';
       } else {
         column.style.display = 'none';
