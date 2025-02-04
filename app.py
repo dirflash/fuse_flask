@@ -62,7 +62,7 @@ for handler in handlers:
 
 app.logger.addHandler(console_handler)
 app.logger.addHandler(file_handler)
-app.logger.setLevel(logging.INFO)
+app.logger.setLevel(logging.DEBUG)
 
 app.logger.info("Application started")
 
@@ -253,6 +253,31 @@ def is_valid_fuse_date(fuse_date):
         flash("Fuse date needs to be set.")
         return False
     return True
+
+
+def get_se_data(Mongo_Connection_URI, db, collection, se_name, se_cco):
+    """
+    Get SE data from MongoDB based on the SE name or CCO.
+    """
+    app.logger.info("Getting SE data from MongoDB...")
+    se_data = None
+    try:
+        if se_name != "NA":
+            app.logger.info(f"Looking up SE name {se_name} in MongoDB...")
+            se_data = Mongo_Connection_URI[db][collection].find_one(
+                {"se_name": se_name}, {"_id": 0}
+            )
+            return se_data
+        elif se_cco != "NA":
+            app.logger.info(f"Looking up SE CCO {se_cco} in MongoDB...")
+            se_data = Mongo_Connection_URI[db][collection].find_one(
+                {"se": se_cco}, {"_id": 0}
+            )
+            return se_data
+    except Exception as e:
+        app.logger.error(f"Error getting SE data from MongoDB: {e}")
+
+    return se_data
 
 
 # Define a route for the default page
@@ -1052,6 +1077,100 @@ def match():
 @app.route("/download_csv/<filename>")
 def download_csv(filename):
     return send_from_directory(directory="match_files", path=filename)
+
+
+@app.route("/se", methods=["GET", "POST"])
+@login_required
+def se():
+    app.logger.info("SE route...")
+    mode = session.get("mode")
+
+    # Get user db and area from the session
+    if mode == "debug":
+        user_db = "fuse-test"
+    else:
+        user_db = session.get("user_db")
+
+    area = session.get("user_area")
+
+    if request.method == "GET":
+        app.logger.info("SE get route...")
+        # render the se.html template for se lookup
+        return render_template(
+            "se.html",
+            admin_users=admin_users,
+        )
+    if request.method == "POST":
+        app.logger.info("SE post route...")
+        name = request.form.get("name")
+        cco = request.form.get("cco")
+        # Process the data as needed
+        app.logger.info(f"Name: {name}, CCO: {cco}")
+
+        # MongoDB connection setup for getting SE data
+        if mode == "debug":
+            Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+            Mongo_Connection_URI = MongoClient(
+                f"{Mongo_Uri}?retryWrites=true&w=majority",
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=500,
+            )
+            user_collection = "cwa_SEs"
+        else:
+            Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+            Mongo_Connection_URI = MongoClient(
+                f"{Mongo_Uri}?retryWrites=true&w=majority",
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=500,
+            )
+            user_collection = f"{session.get('user_area')}_SEs"
+
+        try:
+            Mongo_Connection_URI.admin.command("ping")
+        except Exception as e:
+            app.logger.error(
+                f"Error connecting to MongoDB ({user_db}) for se route: {e}"
+            )
+            return None
+        app.logger.info(f"Connected to MongoDB ({user_db}) for se route.")
+
+        if cco:
+            app.logger.info(f"Lookup by CCO: {cco}")
+            se_data = get_se_data(
+                Mongo_Connection_URI, user_db, user_collection, "NA", cco
+            )
+        elif name:
+            app.logger.info(f"Lookup by name: {name}")
+            se_data = get_se_data(
+                Mongo_Connection_URI, user_db, user_collection, name, "NA"
+            )
+
+        app.logger.debug(f"SE data: {se_data}")
+        if se_data is None:
+            se_found = "NA"
+            app.logger.warning("SE data not found")
+            return render_template(
+                "se.html",
+                se_found=se_found,
+            )
+        else:
+            app.logger.info("SE data found")
+            se_found = "Found"
+            se_name = se_data.get("se_name")
+            se_cco = se_data.get("se")
+            se_op = se_data.get("op")
+            se_region = se_data.get("region")
+            se_schedule = se_data.get("schedule")
+            return render_template(
+                "se.html",
+                se_found=se_found,
+                se_name=se_name,
+                se_cco=se_cco,
+                se_op=se_op,
+                se_region=se_region,
+                se_schedule=se_schedule,
+                admin_users=admin_users,
+            )
 
 
 @app.route("/update-mode", methods=["POST"])

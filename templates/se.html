@@ -1,0 +1,114 @@
+{% extends "base.html" %} {% block content %}
+<h1 class="is-size-3-mobile is-size-1-desktop title">FUSE SE Management!</h1>
+
+{% with messages = get_flashed_messages() %} {% endwith %} {% if
+session.username and session.username != "Not Set" %} {% if fuse_date == "Not
+set" %}
+<p></p>
+{% endif %} {% else %}
+<p><a href="/login" class="underline-link">Login Required</a></p>
+{% endif %}
+
+<div class="columns">
+  <div class="column">
+    <!-- Content for the first column -->
+  </div>
+  <div class="column">
+    <!-- Content for the second column -->
+    <form action="/se" method="post" onsubmit="return validateForm()">
+      <div class="field is-horizontal">
+        <div class="field-label is-normal">
+          <label class="label">Name:</label>
+        </div>
+        <div class="field-body">
+          <div class="field">
+            <div class="control">
+              <input
+                class="input"
+                type="text"
+                name="name"
+                id="name"
+                placeholder="Enter name"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="field is-horizontal">
+        <div class="field-label is-normal">
+          <label class="label">CCO:</label>
+        </div>
+        <div class="field-body">
+          <div class="field">
+            <div class="control">
+              <input
+                class="input"
+                type="text"
+                name="cco"
+                id="cco"
+                placeholder="Enter CCO"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <p class="help is-info">
+          Please fill out either the Name or the CCO field.
+        </p>
+      </div>
+      <div class="field is-grouped is-grouped-centered">
+        <div class="control">
+          <button class="button is-primary" type="submit">Submit</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="column">
+    <!-- Content for the third column -->
+  </div>
+</div>
+
+<hr />
+
+<div class="columns">
+  <div class="column">
+    <!-- Content for the first column -->
+  </div>
+  <div class="column has-text-left">
+    {% if se_found == "NA" %}
+    <p class="is-size-5 has-text-weight-semibold has-text-danger">
+      No SE found. Check spelling and try again.
+    </p>
+    {% else %} {% if se_name %}
+    <p class="is-size-5 has-text-weight-semibold">Name: {{ se_name }}</p>
+    {% endif %} {% if se_cco %}
+    <p class="is-size-5 has-text-weight-semibold">CCO: {{ se_cco }}</p>
+    {% endif %} {% if se_op %}
+    <p class="is-size-5 has-text-weight-semibold">OP: {{ se_op }}</p>
+    {% endif %} {% if se_region %}
+    <p class="is-size-5 has-text-weight-semibold">Region: {{ se_region }}</p>
+    {% endif %} {% if se_schedule is boolean %}
+    <p class="is-size-5 has-text-weight-semibold">
+      Schedule: {{ se_schedule }}
+    </p>
+    {% endif %} {% endif %}
+  </div>
+  <div class="column">
+    <!-- Content for the third column -->
+  </div>
+</div>
+
+<script>
+  function validateForm() {
+    var name = document.getElementById('name').value.trim();
+    var cco = document.getElementById('cco').value.trim();
+    if (name === '' && cco === '') {
+      alert('Please fill out either the Name or the CCO field.');
+      return false;
+    }
+    return true;
+  }
+</script>
+
+{% endblock %}
