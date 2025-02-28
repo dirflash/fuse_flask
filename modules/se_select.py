@@ -8,6 +8,8 @@ from threading import Thread
 from time import perf_counter, sleep
 from typing import Dict
 
+import certifi
+from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 
 import modules.preferences.preferences as p
@@ -95,15 +97,17 @@ class CustomThread(Thread):
         return self.result
 
 
-def create_se_dict(SEs, full_SEs) -> Dict[int, list]:
+def create_se_dict(SEs, full_SEs, mode, user_db) -> Dict[int, list]:
     # Create a dict of all SEs and their regions
     se_dict: Dict[int, list] = {}
     start_se_dict = perf_counter()
     for x in SEs:
-        se_info_result = se_dict_util.make_se_dict(x, se_dict)
+        se_info_result = se_dict_util.make_se_dict(x, se_dict, mode, user_db)
         if se_info_result is None:
             logger.warning(f"Unknown SE: {x}")
-            se_info_result = se_info_util.add_unknown_se(x, full_SEs, se_dict)
+            se_info_result = se_info_util.add_unknown_se(
+                x, full_SEs, se_dict, mode, user_db
+            )
     # clear the temp lists, dicts, variables
     del_vars = ["x", "se_info_result"]
     for var in del_vars:
@@ -253,11 +257,32 @@ def cleanup_se(
         se_dict.pop(region)
 
 
-def lookup_region(se2):
+def lookup_region(se2, user_db, mode):
+
+    # MongoDB connection setup
+    if mode == "debug":
+        Mongo_Uri = (
+            f"mongodb+srv://{p.MONGOUN}:{p.MONGO_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = (
+            f"mongodb+srv://{p.CWA_SE_USER}:{p.CWA_SE_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
     # lookup region for se2
     for _ in range(5):
         try:
-            se2_info = p.se_info.find_one({"se": se2})
+            se2_info = Mongo_Connection_URI[user_db]["cwa_SEs"].find_one({"se": se2})
             break
         except ConnectionFailure as e:
             logger.warning(
@@ -286,9 +311,9 @@ def lookup_region(se2):
                 # Lookup and cache the region index if not already done
                 for _ in range(5):
                     try:
-                        se2_region_doc = p.cwa_regions.find_one(
-                            {"Region": se2_region_name}
-                        )
+                        se2_region_doc = Mongo_Connection_URI[user_db][
+                            "cwa_regions"
+                        ].find_one({"Region": se2_region_name})
                         break
                     except ConnectionFailure as e:
                         logger.error(
@@ -319,11 +344,34 @@ def waterline_target():
     return target_date
 
 
-def last_match_date(se1, se2, target_date):
+def last_match_date(se1, se2, target_date, user_db, mode):
+
+    # MongoDB connection setup
+    if mode == "debug":
+        Mongo_Uri = (
+            f"mongodb+srv://{p.MONGOUN}:{p.MONGO_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = (
+            f"mongodb+srv://{p.CWA_SE_USER}:{p.CWA_SE_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
     # Get the last match date for se1 and se2
     for _ in range(5):
         try:
-            match_check = p.cwa_matches.find_one({"SE": se1})["assignments"]
+            match_check = Mongo_Connection_URI[user_db]["cwa_matches"].find_one(
+                {"SE": se1}
+            )["assignments"]
             break
         except ConnectionFailure as e:
             logger.error(
@@ -347,11 +395,32 @@ def last_match_date(se1, se2, target_date):
         return False
 
 
-def update_cwa_matches(se, other_value, assignment_date, max_retries=5):
+def update_cwa_matches(se, other_value, assignment_date, mode, user_db, max_retries=5):
+
+    # MongoDB connection setup
+    if mode == "debug":
+        Mongo_Uri = (
+            f"mongodb+srv://{p.MONGOUN}:{p.MONGO_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = (
+            f"mongodb+srv://{p.CWA_SE_USER}:{p.CWA_SE_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
     attempts = 0
     while attempts < max_retries:
         try:
-            p.cwa_matches.update_one(
+            Mongo_Connection_URI[user_db]["cwa_matches"].update_one(
                 {"SE": se}, {"$set": {assignment_date: other_value}}, upsert=True
             )
             logger.info(f" Added {se} match to database.")
@@ -368,7 +437,28 @@ def update_cwa_matches(se, other_value, assignment_date, max_retries=5):
                 return False  # Update failed after retries
 
 
-def write_matches_to_file(matches_filename, se_pair_list):
+def write_matches_to_file(matches_filename, se_pair_list, mode, user_db):
+
+    # MongoDB connection setup
+    if mode == "debug":
+        Mongo_Uri = (
+            f"mongodb+srv://{p.MONGOUN}:{p.MONGO_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = (
+            f"mongodb+srv://{p.CWA_SE_USER}:{p.CWA_SE_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
     """Write matches to file"""
     logger.info(f"Writing matches to {matches_filename}")
     matches_file = open(f".\\match_files\\{matches_filename}", "w", encoding="utf-8")
@@ -379,7 +469,9 @@ def write_matches_to_file(matches_filename, se_pair_list):
         try:
             se_info_dict = {
                 doc["se"]: doc["se_name"]
-                for doc in p.se_info.find({"se": {"$in": list(se_ids)}})
+                for doc in Mongo_Connection_URI[user_db]["cwa_SEs"].find(
+                    {"se": {"$in": list(se_ids)}}
+                )
             }
             break
         except ConnectionFailure as e:
@@ -403,18 +495,41 @@ def write_matches_to_file(matches_filename, se_pair_list):
     logger.info(" File written.")
 
 
-def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
+def se_select(fuse_date, Mongo_Connection_URI, se_set, user_db, mode, test_mode=False):
+
+    # MongoDB connection setup
+    if mode == "debug":
+        Mongo_Uri = (
+            f"mongodb+srv://{p.MONGOUN}:{p.MONGO_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = (
+            f"mongodb+srv://{p.CWA_SE_USER}:{p.CWA_SE_BEARER}@{p.MONGOHOST}/{user_db}"
+        )
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+
     start_time = perf_counter()
     logger.info("SE select function...")
     logger.info(f"Tracking {len(se_set)} SEs.")
     kobayashi_se_set = se_set.copy()
     SEs = se_set
-    full_SEs = se_info_util.get_full_se_list(Mongo_Connection_URI, SEs)
+    full_SEs = se_info_util.get_full_se_list(Mongo_Connection_URI, SEs, user_db)
+    logger.info("Returned from get_full_se_list.")
     kobayashi_full_SEs = full_SEs.copy()
     se_pair_list = []
 
     # Add FUSE host if odd number of SEs
     SEs = fuse_host.fuse_host(SEs)
+    logger.info("Returned from fuse_host.")
 
     count = len(SEs)
 
@@ -422,7 +537,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
 
     # Create a dict of all SEs and their regions using threading
     se_dict_thread = CustomThread(
-        target=create_se_dict, args=(SEs, full_SEs), name="se_dict_thread"
+        target=create_se_dict,
+        args=(SEs, full_SEs, mode, user_db),
+        name="se_dict_thread",
     )
     # Create a dict of se:match_count using threading
     se_assignment_count_thread = CustomThread(
@@ -668,7 +785,7 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                 # if se1 is VIP, select an se not in sem_list
                 se2 = choice(list(SEs - sem_set - zero_set - vips))
                 # lookup region for se2
-                se2_region, se2_region_name = lookup_region(se2)
+                se2_region, se2_region_name = lookup_region(se2, user_db, mode)
                 logger.info(f" SE2 {se2} selected from region {se2_region}.")
                 del se2_region_name
                 # del vips, valid_ses, zero_set <- TODO: Move this down, after selecting SE2
@@ -677,14 +794,14 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                 # if se1 is SSEM, select an se not in sem_list
                 se2 = choice(list(SEs - sem_set - zero_set))
                 # lookup region for se2
-                se2_region, se2_region_name = lookup_region(se2)
+                se2_region, se2_region_name = lookup_region(se2, user_db, mode)
                 logger.info(f" SE2 {se2} selected from region {se2_region}.")
             elif SEM is True:
                 logger.info(" SE2 selection for SE1 SEM.")
                 # if se1 is SEM, select an se not in sem_list
                 se2 = choice(list(SEs - sem_set - zero_set))
                 # lookup region for se2
-                se2_region, se2_region_name = lookup_region(se2)
+                se2_region, se2_region_name = lookup_region(se2, user_db, mode)
                 logger.info(f" SE2 {se2} selected from region {se2_region}.")
             elif SE is True:
                 logger.info(" SE2 selection for SE1 SE.")
@@ -701,7 +818,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                 # Has se1 and se2 been paired before?
                 for _ in range(5):
                     try:
-                        check_pairing_se2 = p.cwa_matches.find_one({"SE": se2})
+                        check_pairing_se2 = Mongo_Connection_URI[user_db][
+                            "cwa_matches"
+                        ].find_one({"SE": se2})
                         break
                     except ConnectionFailure as e:
                         logger.error(
@@ -712,6 +831,22 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                         )
                         sleep(pow(2, _))
                         logger.error(e)
+
+                # TODO: Fix the code above to handle a situation where there is no record for the SE
+
+                logger.info(f"check_pairing_se2: {check_pairing_se2}")
+
+                """# Check if assignments is empty or None
+                if check_pairing_se2 and not check_pairing_se2.get("assignments"):
+                    logger.info(f"{se2} has no assignment history.")
+                    logger.info(f"SE1 {se1} and SE2 {se2} have not been paired before.")
+                    del check_pairing_se2
+                else:
+                    # Create a set of previous matches for se2
+                    se2_assignments = {
+                        x for x in check_pairing_se2.get("assignments", {}).values()
+                    }
+                    del check_pairing_se2"""
 
                 # is assignments empty?
                 if not check_pairing_se2["assignments"]:
@@ -741,7 +876,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                             # Was a match made with SE1 in the last 2 years?
                             target_date = waterline_target()
                             # Check if se1 and se2 were matched in the last 2 years
-                            match_check = last_match_date(se1, se2, target_date)
+                            match_check = last_match_date(
+                                se1, se2, target_date, user_db, mode
+                            )
                             if match_check is False:
                                 kobayashi = True
                             else:
@@ -754,9 +891,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                             for _ in range(5):
                                 try:
                                     se1_matches = list(
-                                        p.cwa_matches.find_one({"SE": se1})[
-                                            "assignments"
-                                        ].values()
+                                        Mongo_Connection_URI[user_db]["cwa_matches"]
+                                        .find_one({"SE": se1})["assignments"]
+                                        .values()
                                     )
                                     break
                                 except ConnectionFailure as e:
@@ -777,7 +914,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                             if len(se1_matchables) > 0:
                                 # Select new se2 from se1_matchables
                                 se2 = choice(se1_matchables)
-                                se2_region, se2_region_name = lookup_region(se2)
+                                se2_region, se2_region_name = lookup_region(
+                                    se2, user_db, mode
+                                )
                                 logger.info(
                                     f" SE2 {se2} selected from region {se2_region_name}."
                                 )
@@ -810,7 +949,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                                     # Select a random SE from se1_matchables
                                     se2 = choice(se1_matchables)
                                     # lookup region for se2
-                                    se2_region, se2_region_name = lookup_region(se2)
+                                    se2_region, se2_region_name = lookup_region(
+                                        se2, user_db, mode
+                                    )
                                     logger.info(
                                         f" Selected region {se2_region} with {len(se_dict[se2_region][1])} SEs."
                                     )
@@ -942,7 +1083,7 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
             )
 
             # Create se_dict
-            se_dict = create_se_dict(SEs, full_SEs)
+            se_dict = create_se_dict(SEs, full_SEs, mode, user_db)
 
             # Create the sem_set
             sem_set = make_sem_set(SEs)
@@ -965,7 +1106,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
 
                 for _ in range(5):
                     try:
-                        add_se = p.cwa_matches.update_one(
+                        add_se = Mongo_Connection_URI[user_db][
+                            "cwa_matches"
+                        ].update_one(
                             {"SE": x},
                             {"$set": {assignment_date: y}},
                             upsert=True,
@@ -980,7 +1123,9 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
 
                 for _ in range(5):
                     try:
-                        add_se = p.cwa_matches.update_one(
+                        add_se = Mongo_Connection_URI[user_db][
+                            "cwa_matches"
+                        ].update_one(
                             {"SE": y},
                             {"$set": {assignment_date: x}},
                             upsert=True,
@@ -993,14 +1138,14 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
                         return 500
 
                 # Update SE x
-                if update_cwa_matches(x, y, assignment_date):
+                if update_cwa_matches(x, y, assignment_date, mode, user_db):
                     collection_updates += 1
                 else:
                     # Decide how to handle the cumulative error case
                     pass
 
                 # Update SE y
-                if update_cwa_matches(y, x, assignment_date):
+                if update_cwa_matches(y, x, assignment_date, mode, user_db):
                     collection_updates += 1
                 else:
                     # Decide how to handle the cumulative error case
@@ -1015,12 +1160,12 @@ def se_select(fuse_date, Mongo_Connection_URI, se_set, test_mode=False):
         try:
             date_name = fuse_date.replace("/", "_")
             matches_filename = f"{date_name}-matches.csv"
-            write_matches_to_file(matches_filename, se_pair_list)
+            write_matches_to_file(matches_filename, se_pair_list, mode, user_db)
         except PermissionError:
             logger.error("PermissionError writing matches to file.")
             filename_count = randint(1, 100)
             matches_filename = f"{f_date}-matches-PE{filename_count}.csv"
-            write_matches_to_file(matches_filename, se_pair_list)
+            write_matches_to_file(matches_filename, se_pair_list, mode, user_db)
         except Exception as e:
             logger.error("Error writing matches to file.")
             logger.error(e)

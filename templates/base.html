@@ -176,8 +176,11 @@
           {% if match_file != "NA" %}
           <p>Match File: {{ match_file }}</p>
           {% endif %}
-          {% if user_db != "NA" %}
+          {% if user_db %}
           <p>Database: {{ user_db }}</p>
+          {% endif %}
+          {% if mode %}
+          <p>Mode: {{ mode }}</p>
           {% endif %}
           {% else %}
           <p>Session Username: Not set</p>

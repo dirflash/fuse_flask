@@ -37,10 +37,10 @@ logger.propagate = False
 se_dict: Dict[int, list] = {}
 
 
-def make_se_dict(x: str, se_dict: dict) -> Any:
+def make_se_dict(x: str, se_dict: dict, user_db: str, mode: str) -> Any:
     # Look up the SE in the SE info collection and return the SE info.
     # get_se_info does the lookup and builds an entry in the se_dict
-    se_info_result = se_info_util.get_se_info(x, se_dict)
+    se_info_result = se_info_util.get_se_info(x, se_dict, user_db, mode)
     if se_info_result is not None:
         return se_info_result
     else:

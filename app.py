@@ -339,6 +339,8 @@ def home():
     if username is not None:
         app.logger.info(f"{username} accessed the home page route...")
 
+        app.logger.info(f"Session cookie: {session}")
+
         # Get user db from the session
         user_db = "fuse-test"
         mode = "debug"
@@ -348,8 +350,8 @@ def home():
                 user_db = "fuse-test"
             else:
                 # Set mode to debug in the session
-                logging.info("Setting mode to debug in the session")
-                session["mode"] = "debug"
+                logging.info(f"Session in {mode}.")
+                # session["mode"] = "debug"
                 user_db = session.get("user_db")
 
         # Get user info from MongoDB in the "fuse-db" database
@@ -391,7 +393,7 @@ def home():
             session["user_area"] = user_area
             if "mode" not in session:
                 session["mode"] = "debug"
-            app.logger.info(f"User database: {user_db}")
+            app.logger.info(f"User mode is {session["mode"]} - database: {user_db}")
 
             # MongoDB connection setup for the fuse date user
             Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
@@ -400,6 +402,20 @@ def home():
                 tlsCAFile=certifi.where(),
                 serverSelectionTimeoutMS=500,
             )
+
+            if mode == "production":
+                CWA_SE_USER = pref.CWA_SE_USER
+                CWA_SE_BEARER = pref.CWA_SE_BEARER
+                MONGOHOST = "cluster0.jzvod.mongodb.net"
+                MONGODB = "fuse-cwa-se"
+                MONGO_URI = (
+                    f"mongodb+srv://{CWA_SE_USER}:{CWA_SE_BEARER}@{MONGOHOST}/{MONGODB}"
+                )
+                Mongo_Connection_URI: MongoClient = MongoClient(
+                    f"{MONGO_URI}?retryWrites=true&w=majority",
+                    tlsCAFile=certifi.where(),
+                    serverSelectionTimeoutMS=500,
+                )
 
             try:
                 Mongo_Connection_URI.admin.command("ping")
@@ -486,6 +502,20 @@ def set_fuse_date():
             serverSelectionTimeoutMS=500,
         )
 
+        if mode == "production":
+            CWA_SE_USER = pref.CWA_SE_USER
+            CWA_SE_BEARER = pref.CWA_SE_BEARER
+            MONGOHOST = "cluster0.jzvod.mongodb.net"
+            MONGODB = "fuse-cwa-se"
+            MONGO_URI = (
+                f"mongodb+srv://{CWA_SE_USER}:{CWA_SE_BEARER}@{MONGOHOST}/{MONGODB}"
+            )
+            Mongo_Connection_URI: MongoClient = MongoClient(
+                f"{MONGO_URI}?retryWrites=true&w=majority",
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=500,
+            )
+
         try:
             Mongo_Connection_URI.admin.command("ping")
         except Exception as e:
@@ -526,6 +556,17 @@ def set_fuse_date():
 
     # Get the Fuse date
     app.logger.info("Getting the Fuse date...")
+    if mode == "production":
+        CWA_SE_USER = pref.CWA_SE_USER
+        CWA_SE_BEARER = pref.CWA_SE_BEARER
+        MONGOHOST = "cluster0.jzvod.mongodb.net"
+        MONGODB = "fuse-cwa-se"
+        MONGO_URI = f"mongodb+srv://{CWA_SE_USER}:{CWA_SE_BEARER}@{MONGOHOST}/{MONGODB}"
+        Mongo_Connection_URI: MongoClient = MongoClient(
+            f"{MONGO_URI}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
     fuse_date = FuseDate().get_fuse_date(Mongo_Connection_URI, user_db, area, mode)
     current_date = date.today()
 
@@ -569,6 +610,13 @@ def upload_file():
     """
 
     app.logger.info(f"File upload route with method: {request.method}")
+
+    if "mode" in session:
+        mode = session.get("mode")
+        app.logger.info(f"Session in {mode}.")
+    else:
+        app.logger.info("Mode not found in Session.")
+
     if request.method == "POST":
         app.logger.info("File upload post route...")
 
@@ -641,6 +689,9 @@ def upload_file():
                 data=df.to_html(index=False, classes="table table-striped"),
                 file_size=file_size,
                 upload_time=upload_time,
+                user_db=session.get("user_db"),
+                mode=mode,
+                admin_users=admin_users,
             )
 
         if not file_uploaded:
@@ -648,7 +699,13 @@ def upload_file():
             return render_template("upload.html", error="No file uploaded")
 
     # If the request method is GET, render the upload form
-    return render_template("upload.html")
+    app.logger.info(session)
+    return render_template(
+        "upload.html",
+        user_db=session.get("user_db"),
+        mode=mode,
+        admin_users=admin_users,
+    )
 
 
 @app.route("/result", methods=["GET", "POST"])
@@ -740,6 +797,7 @@ def process_csv():
         no_response=no_response,
         admin_users=admin_users,
         user_db=user_db,
+        mode=mode,
     )
 
 
@@ -896,15 +954,17 @@ def se_attendance():
         admin_users=admin_users,
         file_name=filename,
         user_db=user_db,
+        mode=mode,
     )
 
 
 @app.route("/submit_names", methods=["POST"])
 def submit_names():
+    app.logger.info("Submit names route...")
     fuse_date = session.get("X-FuseDate")
     selected_names = request.form.getlist("names")
     filename = session.get("X-Filename")
-    logging.info(f"Selected names: {selected_names}")
+    app.logger.info(f"Selected names: {selected_names}")
 
     mode = session.get("mode")
 
@@ -956,6 +1016,7 @@ def submit_names():
         selected_names=selected_names,
         admin_users=admin_users,
         user_db=user_db,
+        mode=mode,
     )
 
 
@@ -977,9 +1038,43 @@ def match():
 
     # Get user db and area from the session
     area = session.get("user_area")
-    mongo_db = session.get("mongo_db")
+    # mongo_db = session.get("mongo_db")
 
     # MongoDB connection setup for processing the CSV file
+    """if mode == "debug":
+        Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        Mongo_Uri = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )"""
+
+    """if mode == "production":
+        app.logger.info("Loading Production mode database connection for SE Match...")
+        # MONGODB = session.get(user_db)  # "fuse-cwa-se"
+        MONGO_URI = f"mongodb+srv://{pref.CWA_SE_USER}:{pref.CWA_SE_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{MONGO_URI}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )
+    else:
+        app.logger.info("Loading Debug mode database connection for SE Match...")
+        Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
+        Mongo_Connection_URI = MongoClient(
+            f"{Mongo_Uri}?retryWrites=true&w=majority",
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=500,
+        )"""
+
+    # MongoDB connection setup for selecting SEs
     if mode == "debug":
         Mongo_Uri = f"mongodb+srv://{pref.MONGOUN}:{pref.MONGO_BEARER}@{pref.MONGOHOST}/{user_db}"
         Mongo_Connection_URI = MongoClient(
@@ -1011,15 +1106,19 @@ def match():
         app.logger.info("SE match post route...")
         # Match attending SEs
         se_set = get_attendance(Mongo_Connection_URI, fuse_date, user_db, area)
-        # Does "mode" exist in the session?
-        if "mode" not in session:
-            mode = "production"
-            session["mode"] = mode
-        # if "mode" exists in the session, get the value of "mode"
+        app.logger.info("Returned from se_set function...")
+
+        app.logger.info(f"Mode: {mode}")
+
+        if mode == "production":
+            user_db = session.get("user_db")
         else:
-            mode = session.get("mode")
+            user_db = "fuse-test"
+        app.logger.info(f"User DB: {user_db}")
+
         # SE matching process. Returns the file name of the match file
-        status = se_select(fuse_date, Mongo_Connection_URI, se_set)  # , mode)
+        app.logger.info("Kick off SE matching process...")
+        status = se_select(fuse_date, Mongo_Connection_URI, se_set, user_db, mode)
         if status == "NA":
             app.logger.warning("No SEs match file created.")
             match_file = "NA"
@@ -1049,6 +1148,7 @@ def match():
             test_mode=mode,
             match_file=match_file,
             user_db=user_db,
+            mode=mode,
             data=df.to_html(index=False, classes="table table-striped"),
         )
 
@@ -1071,6 +1171,7 @@ def match():
         total_names=len(se_set),
         test_mode=mode,
         user_db=user_db,
+        mode=mode,
     )
 
 
@@ -1170,6 +1271,7 @@ def se():
                 se_region=se_region,
                 se_schedule=se_schedule,
                 admin_users=admin_users,
+                mode=mode,
             )
 
 
