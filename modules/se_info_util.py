@@ -87,43 +87,18 @@ def get_full_se_list(Mongo_Connection_URI, SEs, user_db) -> list:
     return full_SEs
 
 
-'''def get_full_se_list(Mongo_Connection_URI, SEs) -> list:
-    """Get full list of SEs from se_info collection."""
-    logger.info("Getting full SE list")
-    fuse_date = session.get("X-FuseDate")
-    full_SEs = []
-    # Look up each entry in SEs, get the name, and add it to full_SEs
-    for x in SEs:
-        for _ in range(5):
-            try:
-                # Lookup name from cwa_SEs collection
-                se_name = Mongo_Connection_URI[p.MONGODB]["cwa_SEs"].find_one({"se": x})
-                if se_name is not None:
-                    full_SEs.append([x, se_name["se_name"]])
-                    break
-                else:
-                    logger.warning(f"Unknown SE: {x}")
-                    break
-            except ConnectionFailure as e:
-                print(f" *** Connect error getting SE {x} from cwa_SEs collection.")
-                print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
-                sleep(pow(2, _))
-                print(e)
-    return full_SEs'''
-
-
 def get_se_info(
     x: str, se_dict: dict, mode: str, user_db: str
 ) -> Optional[Dict[str, Any]]:
 
-    # logger.info(f"Start get_se_info for {x} in mode {mode}.")
+    logger.info(f"Start get_se_info for {x} in mode {mode}.")
 
     # MongoDB connection setup
     if mode == "debug":
         Mongo_Uri = (
             f"mongodb+srv://{p.MONGOUN}:{p.MONGO_BEARER}@{p.MONGOHOST}/{user_db}"
         )
-        Mongo_Connection_URI = MongoClient(
+        Mongo_Connection_URI: MongoClient = MongoClient(
             f"{Mongo_Uri}?retryWrites=true&w=majority",
             tlsCAFile=certifi.where(),
             serverSelectionTimeoutMS=500,
@@ -132,13 +107,14 @@ def get_se_info(
         Mongo_Uri = (
             f"mongodb+srv://{p.CWA_SE_USER}:{p.CWA_SE_BEARER}@{p.MONGOHOST}/{user_db}"
         )
-        Mongo_Connection_URI = MongoClient(
+        Mongo_Connection_URI: MongoClient = MongoClient(
             f"{Mongo_Uri}?retryWrites=true&w=majority",
             tlsCAFile=certifi.where(),
             serverSelectionTimeoutMS=500,
         )
 
-    """Get SE info from se_info collection and add SE/Region details to se_dict."""
+    # Get SE info from se_info collection and add SE/Region details to se_dict.
+
     if current_thread().name == "MainThread":
         for _ in range(5):
             try:
@@ -212,7 +188,7 @@ def add_unknown_se(
         Mongo_Uri = (
             f"mongodb+srv://{p.MONGOUN}:{p.MONGO_BEARER}@{p.MONGOHOST}/{user_db}"
         )
-        Mongo_Connection_URI = MongoClient(
+        Mongo_Connection_URI: MongoClient = MongoClient(
             f"{Mongo_Uri}?retryWrites=true&w=majority",
             tlsCAFile=certifi.where(),
             serverSelectionTimeoutMS=500,
